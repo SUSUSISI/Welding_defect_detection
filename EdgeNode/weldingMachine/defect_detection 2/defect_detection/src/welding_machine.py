@@ -35,7 +35,7 @@ class WeldingMachine:
     port_voltage = None
     port_wire_feed = None
 
-    address = 'localhost'
+    address = '172.30.1.20'
     port = 5020
     client = None
     sleep_time = 0.1

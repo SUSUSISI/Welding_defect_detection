@@ -1,27 +1,25 @@
 from pymodbus.client.sync import ModbusTcpClient
 import threading
 import time
+import threads
 from datetime import datetime
 
-class EdgeNode:
-    plc_address = '172.30.1.31'
-    plc_port = 5020
-    server_address = ''
-    send_time = 1
-    read_time = 0.1
-    client = None
-    dataSet = None
+
+class EdgeNodeData:
+    data_set = None
+    PID = 1
+    FLAG_WELDING = False
     current_data = None
 
-    init_current = 8.0
-    init_voltage = 0.0
-    init_wire_feed = 0.0
 
-    __read_plc_thread = None
-    __send_server_thread = None
-    __wait_request_thread = None
+class EdgeNode:
 
     def __init__(self):
+        self.data = EdgeNodeData
+        self.__read_plc_thread = threads.ReadPlcThread(self.data)
+        self.__send_server_thread = None
+        self.__wait_request_thread = None
+
         self.base_time = time.time()
 
     def sleep(self, sec):
@@ -50,7 +48,7 @@ class EdgeNode:
     def read_plc(self):
         self.sleep(self.read_time)
         when = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-        data = self.client.read_holding_registers(0,3)
+        data = self.client.read_holding_registers(0, 3)
         if data.isError():
             print("data read error!!")
             return [when, None, None, None]
@@ -58,12 +56,9 @@ class EdgeNode:
             return [when, data.registers[0], data.registers[1], data.registers[2]]
 
     def run(self):
+        self.__read_plc_thread = threading.Thread(target=a, )
 
 
+def a():
+    return 1
 
-
-
-a = EdgeNode()
-print(a.plc_address)
-a.plc_address = "111"
-print(a.plc_address)

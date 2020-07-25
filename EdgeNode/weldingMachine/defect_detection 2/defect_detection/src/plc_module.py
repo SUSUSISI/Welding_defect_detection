@@ -9,6 +9,6 @@ def run_server():
         hr=ModbusSequentialDataBlock(0, [17] * 100),
         ir=ModbusSequentialDataBlock(0, [17] * 100))
 
-    print("PLC Server ON ( localhost : 5020 )")
+    print("PLC Server ON ( 172.30.1.20 : 5020 )")
     context = ModbusServerContext(slaves=store, single=True)
-    StartTcpServer(context, address=("localhost", 5020))
+    StartTcpServer(context, address=("172.30.1.20", 5020))
