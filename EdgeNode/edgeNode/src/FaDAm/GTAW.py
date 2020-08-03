@@ -162,9 +162,9 @@ def save_welding_data(data, path):
 
     curr_data = data.data
 
-    for i in curr_data:
-        row = [data_index, data.time[i], data.process_id, round(i[0], 1), round(i[1], 1),
-               round(i[2], 1), data.prediction_label, data.label]
+    for i in range(len(curr_data)):
+        row = [data_index, data.time[i], data.process_id, curr_data[i][0], curr_data[i][1],
+               curr_data[i][2], data.prediction_label, data.label]
         writer.writerow(row)
         data_index += 1
 

@@ -6,8 +6,9 @@ from datetime import datetime
 import sys
 from PyQt5.QtWidgets import *
 from PyQt5 import uic
+from PyQt5.QtGui import QTextCursor
 import socketio
-
+from threading import Thread
 
 form_class = uic.loadUiType("ui/edgenode.ui")[0]
 
@@ -32,13 +33,19 @@ class EdgeNode(QMainWindow, form_class):
     __FLAG_PLC_CONNECTION = False
     __FLAG_SERVER_CONNECTION = False
 
+    server = None
+    __read_plc_thread = None
+    __send_data_set_thread = None
+    __send_current_status_thread = None
+
     def __init__(self):
         super().__init__()
-        self.__read_plc_thread = threads.ReadPlcThread(self)
-        self.__send_data_set_thread = threads.SendDataSetThread(self)
-        self.__send_current_status_thread = threads.SendCurrentStatusThread(self)
-
         self.init_ui()
+
+    def write_log(self, msg):
+        when = datetime.now().strftime('[%Y_%m_%d %H:%M:%S]: ')
+        self.tb_log.append(when + msg)
+        self.tb_log.moveCursor(QTextCursor.End)
 
     def set_FLAG_PLC_CONNECTION(self, flag):
         self.__FLAG_PLC_CONNECTION = flag
@@ -85,31 +92,41 @@ class EdgeNode(QMainWindow, form_class):
         self.plc_port = self.le_plc_port.text()
         self.run()
 
-    def btn_stop_func(self):
+    def wait_stop(self):
+        while self.__read_plc_thread.is_alive() or self.server.is_alive() \
+                or self.__send_data_set_thread.is_alive() or self.__send_current_status_thread.is_alive():
+            time.sleep(0.5)
+
+        self.write_log("중지 완료")
         self.btn_run.setEnabled(True)
         self.le_server_address.setEnabled(True)
         self.le_server_port.setEnabled(True)
         self.le_plc_address.setEnabled(True)
         self.le_plc_port.setEnabled(True)
+
+    def btn_stop_func(self):
+        self.write_log("중지 중...")
         self.btn_stop.setEnabled(False)
         self.stop()
+        self.set_FLAG_SERVER_CONNECTION(False)
+        self.set_FLAG_PLC_CONNECTION(False)
 
-    def connect_server(self):
-        print(self.server_port)
-
-    def disconnect_server(self):
-        print(self.server_port)
+        wait_thread = Thread(target=self.wait_stop, args=())
+        wait_thread.start()
 
     def stop(self):
         self.__read_plc_thread.kill()
         self.__send_data_set_thread.kill()
         self.__send_current_status_thread.kill()
-
-        self.disconnect_server()
+        self.server.kill()
 
     def run(self):
-        self.connect_server()
+        self.server = threads.Server(self)
+        self.__read_plc_thread = threads.ReadPlcThread(self)
+        self.__send_data_set_thread = threads.SendDataSetThread(self)
+        self.__send_current_status_thread = threads.SendCurrentStatusThread(self.server)
 
+        self.server.start()
         self.__read_plc_thread.start()
         self.__send_data_set_thread.start()
         self.__send_current_status_thread.start()

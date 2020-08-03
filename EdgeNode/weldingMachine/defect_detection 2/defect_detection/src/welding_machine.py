@@ -75,12 +75,12 @@ class WeldingMachine:
 
         self.sleep()
         self.client.write_registers(0, [send_current, send_voltage, send_wire_feed])
-        print("-----------------------------------------------")
-        print(datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+        # print("-----------------------------------------------")
+        # print(datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
         # print("current : ", send_current)
         # print("voltage : ", send_voltage)
         # print("wire_feed : ", send_wire_feed)
-        print("-----------------------------------------------")
+        # print("-----------------------------------------------")
 
     def sleep(self):
         distance = (time.time() - self.base_time) // self.sleep_time
@@ -113,9 +113,10 @@ class WeldingMachine:
             # save_thread = threading.Thread(target=save_data, args=(self.current_data, self.path))
             # save_thread.start()
 
+            log("용접시작")
             for i in self.current_data.data:
                 self.send_data(i)
-
+            log("용접 끝")
             self.current_data = self.next_data
 
         self.client.close()
@@ -150,7 +151,7 @@ class WeldingMachine:
                                                     duration)
 
     def generate_next_data(self):
-        self.next_data = self.generate_welding_data()
+        self.next_data = self.generate_welding_data(10)
 
     def generate_welding_data(self, duration=None):
         if duration is None:
@@ -183,6 +184,10 @@ def save_data(data, path):
 
     file_path = path + "process_" + str(data.process_id) + ".csv"
     fd.GTAW.save_welding_data(data, file_path)
+
+
+def log(msg):
+    print(datetime.now().strftime('[%Y-%m-%d %H:%M:%S.%f]: '), msg)
 
 
 if __name__ == "__main__":

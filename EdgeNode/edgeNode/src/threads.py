@@ -44,19 +44,17 @@ class CustomThread(Thread):
 
 
 class SendCurrentStatusThread(CustomThread):
-    def __init__(self, data):
+    def __init__(self, server):
         super().__init__()
+        self.server = server
         self.clock_time = 1
-        self.data = data
-
-    def send_to_server(self):
-        self.sync()
-        # print(self.clock_time)
 
     def run(self):
         self.init_before_run()
         while not self.FLAG_KILL:
-            self.send_to_server()
+            self.sync()
+            self.server.send_current_status()
+            print(datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
             while self.FLAG_PAUSE:
                 time.sleep(0.1)
 
@@ -66,8 +64,11 @@ class Server(CustomThread):
 
     def __init__(self, data):
         super().__init__()
-        # self.data = data
-        self.data = "test"
+        self.data = data
+
+    def kill(self):
+        super().kill()
+        self.sio.disconnect()
 
     def run(self):
         self.init_before_run()
@@ -78,28 +79,30 @@ class Server(CustomThread):
                 # self.sio.connect('http://' + self.data.server_address +
                 #                  ":" + self.data.server_port)
                 self.sio.connect('http://localhost:5020')
+                self.data.set_FLAG_SERVER_CONNECTION(True)
+                self.data.write_log("서버와 연결되었습니다.")
 
-            except sioe.ConnectionError:
-                print("Server Connection Error")
+            except sioe.SocketIOError:
+                self.data.write_log("서버와 연결이 되지 않습니다.")
 
             while self.FLAG_PAUSE:
                 time.sleep(0.1)
 
     def send_current_status(self):
-        print("send current status ", self.data)
+        print("send current status ")
 
-    def send_data_set(self):
-        print("send data set ", self.data)
-
+    def send_data_set(self, file_path):
+        print("send data set")
 
     @sio.event
     def connect_error(self):
-        print("CON ERROR ERROR")
+        print("Server Connection Error")
+
         # 그냥 빨간불 파란불만 건드리기 + log
 
     @sio.event
     def connect(self):
-        print("CON GOOD")
+        print("Server Connected")
         # 그냥 빨간불 파란불만 건드리기
 
     @sio.event
@@ -128,14 +131,16 @@ class SendDataSetThread(CustomThread):
     def __init__(self, data):
         super().__init__()
         self.data = data
+        self.clock_time = 1
 
     def send_to_server(self):
         file_path = self.save_data_set()
-        # 파일 보내기
+        self.data.server.send_data_set(file_path)
 
     def save_data_set(self):
         file_path = save_data(self.data.done_data_set, self.data.path)
         self.data.done_data_set = None
+        self.data.write_log("DATA SET 저장 (" + file_path + ")")
         return file_path
 
     def run(self):
@@ -162,8 +167,10 @@ class ReadPlcThread(CustomThread):
 
     def connect_plc(self):
         self.data.plc_client = ModbusTcpClient(self.data.plc_address, port=self.data.plc_port)
-        self.data.plc_client.connect()
-
+        if self.data.plc_client.connect():
+            self.data.set_FLAG_PLC_CONNECTION(True)
+            self.data.write_log("PLC 연결 성공")
+            
     def disconnect_plc(self):
         self.data.plc_client.close()
         self.data.plc_client = None
@@ -175,12 +182,16 @@ class ReadPlcThread(CustomThread):
             read_data = self.data.plc_client.read_holding_registers(0, 3)
             self.data.set_FLAG_PLC_CONNECTION(True)
             if read_data.isError():
-                print("Data Read Error")
+                self.data.write_log("Data Read Error")
                 return when, [None, None, None]
             else:
-                return when, [read_data.registers[0], read_data.registers[1], read_data.registers[2]]
+                cur = read_data.registers[0]/100
+                vol = read_data.registers[1]/100
+                wir = read_data.registers[2]/100
+                print(cur, ", ", vol, ", ", wir)
+                return when, [read_data.registers[0]/100, read_data.registers[1]/100, read_data.registers[2]/100]
         except pme.ConnectionException:
-            print("PLC Connection Error")
+            self.data.write_log("PLC Connection Error")
             self.data.set_FLAG_PLC_CONNECTION(False)
             return when, [None, None, None]
 
@@ -227,6 +238,4 @@ class ReadPlcThread(CustomThread):
 
             while self.FLAG_PAUSE:
                 time.sleep(0.1)
-
-        print("read_plc Killed")
         self.disconnect_plc()
