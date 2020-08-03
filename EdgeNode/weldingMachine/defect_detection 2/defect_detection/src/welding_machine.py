@@ -6,15 +6,14 @@ from datetime import datetime
 import random as rd
 import numpy as np
 import normal_data_generator
-import machanical_error_data_generator
+import mechanical_error_data_generator
 import porosity_data_generator
 import undercurrent_data_generator
 import undercut_data_generator
 import threading
 import time
 from pymodbus.client.sync import ModbusTcpClient
-from pymodbus.server.sync import StartTcpServer
-from pymodbus.datastore.context import *
+from matplotlib import pyplot as plt
 
 
 class WeldingMachine:
@@ -40,11 +39,15 @@ class WeldingMachine:
     client = None
     sleep_time = 0.1
 
-    def __init__(self, name, error_rate):
+    def __init__(self, name, error_rate, address=None, port=None):
         self.name = name
         self.error_rate = error_rate
         self.path = "data/" + self.name + "_" + datetime.now().strftime('%Y_%m_%d_%H%M%S') + "/"
         self.base_time = time.time()
+        if address is not None:
+            self.address = address
+        if port is not None:
+            self.port = port
 
     def set_base(self, current, voltage, wire_feed):
         self.base_current = current
@@ -57,8 +60,8 @@ class WeldingMachine:
         self.init_wire_feed = wire_feed
 
     def warm_up(self):
-        self.current_data = self.generate_welding_data()
-        self.next_data = self.generate_welding_data()
+        self.generate_next_data()
+        self.current_data = self.next_data
 
     def set_port(self, port_current, port_voltage, port_wire_feed):
         self.port_current = port_current
@@ -83,17 +86,19 @@ class WeldingMachine:
         distance = (time.time() - self.base_time) // self.sleep_time
         while True:
             after = (time.time() - self.base_time) // self.sleep_time
-            if after == distance+1:
+            if after == distance + 1:
                 break
             else:
                 time.sleep(0.001)
 
     def run(self):
         self.warm_up()
+        gen_thread = threading.Thread(target=self.generate_welding_data, args=())
         self.client = ModbusTcpClient(self.address, port=self.port)
         self.client.connect()
 
         while True:
+
             intermission = rd.randint(10, 100)
             for i in range(intermission):
                 curr = abs(np.random.normal(0, 1)) % self.init_current
@@ -101,50 +106,68 @@ class WeldingMachine:
                 wire = 0.0
                 self.send_data([curr, volt, wire])
 
+            self.generate_next_data()
             self.current_data.time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             self.current_data.process_id = self.process_id
 
             # save_thread = threading.Thread(target=save_data, args=(self.current_data, self.path))
-            # save_thread.run()
+            # save_thread.start()
 
             for i in self.current_data.data:
                 self.send_data(i)
 
             self.current_data = self.next_data
-            self.current_data = self.generate_welding_data()
 
         self.client.close()
 
     def set_port_name(self, port):
         self.port = port
 
+    def generate_normal_data(self, duration):
+        return normal_data_generator.generate(self.base_current, self.base_voltage, self.base_wire_feed,
+                                              self.init_current, self.init_voltage, self.init_wire_feed, duration)
+
+    def generate_mechanical_data(self, duration):
+        return mechanical_error_data_generator.generate(self.base_current, self.base_voltage,
+                                                        self.base_wire_feed,
+                                                        self.init_current, self.init_voltage,
+                                                        self.init_wire_feed,
+                                                        duration)
+
+    def generate_porosity_data(self, duration):
+        return porosity_data_generator.generate(self.base_current, self.base_voltage, self.base_wire_feed,
+                                                self.init_current, self.init_voltage, self.init_wire_feed,
+                                                duration)
+
+    def generate_undercut_data(self, duration):
+        return undercut_data_generator.generate(self.base_current, self.base_voltage, self.base_wire_feed,
+                                                self.init_current, self.init_voltage, self.init_wire_feed,
+                                                duration)
+
+    def generate_undercurrent_data(self, duration):
+        return undercurrent_data_generator.generate(self.base_current, self.base_voltage, self.base_wire_feed,
+                                                    self.init_current, self.init_voltage, self.init_wire_feed,
+                                                    duration)
+
+    def generate_next_data(self):
+        self.next_data = self.generate_welding_data()
+
     def generate_welding_data(self, duration=None):
         if duration is None:
             duration = rd.randint(600, 3600)
 
         if rd.random() >= self.error_rate:
-            return normal_data_generator.generate(self.base_current, self.base_voltage, self.base_wire_feed,
-                                                  self.init_current, self.init_voltage, self.init_wire_feed, duration)
+            return self.generate_normal_data(duration)
         else:
             error_case = rd.randint(1, 4)
             if error_case == 1:
-                return machanical_error_data_generator.generate(self.base_current, self.base_voltage,
-                                                                self.base_wire_feed,
-                                                                self.init_current, self.init_voltage,
-                                                                self.init_wire_feed,
-                                                                duration)
+                return self.generate_mechanical_data(duration)
             elif error_case == 2:
-                return porosity_data_generator.generate(self.base_current, self.base_voltage, self.base_wire_feed,
-                                                        self.init_current, self.init_voltage, self.init_wire_feed,
-                                                        duration)
+                return self.generate_porosity_data(duration)
             elif error_case == 3:
-                return undercut_data_generator.generate(self.base_current, self.base_voltage, self.base_wire_feed,
-                                                        self.init_current, self.init_voltage, self.init_wire_feed,
-                                                        duration)
+                return self.generate_undercut_data(duration)
             elif error_case == 4:
-                return undercurrent_data_generator.generate(self.base_current, self.base_voltage, self.base_wire_feed,
-                                                            self.init_current, self.init_voltage, self.init_wire_feed,
-                                                            duration)
+                return self.generate_undercurrent_data(duration)
 
 
 def save_data(data, path):
@@ -162,6 +185,6 @@ def save_data(data, path):
     fd.GTAW.save_welding_data(data, file_path)
 
 
-test = WeldingMachine("one", 0.2)
-test.run()
-
+if __name__ == "__main__":
+    test = WeldingMachine("one", 0.2, 'localhost', 5020)
+    test.run()

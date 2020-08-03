@@ -1,64 +1,123 @@
 from pymodbus.client.sync import ModbusTcpClient
-import threading
 import time
 import threads
+import FaDAm as fd
 from datetime import datetime
+import sys
+from PyQt5.QtWidgets import *
+from PyQt5 import uic
+import socketio
 
 
-class EdgeNodeData:
+form_class = uic.loadUiType("ui/edgenode.ui")[0]
+
+
+class EdgeNode(QMainWindow, form_class):
+
     data_set = None
     PID = 1
-    FLAG_WELDING = False
+    current_time = None
     current_data = None
+    done_data_set = None
+    path = "data/started_" + datetime.now().strftime('%Y_%m_%d_%H%M%S') + "/"
 
+    plc_address = '172.30.1.20'
+    plc_port = '5020'
+    plc_client = None
 
-class EdgeNode:
+    server_address = '123.123.123.123'
+    server_port = '5020'
+
+    FLAG_WELDING = False
+    __FLAG_PLC_CONNECTION = False
+    __FLAG_SERVER_CONNECTION = False
 
     def __init__(self):
-        self.data = EdgeNodeData
-        self.__read_plc_thread = threads.ReadPlcThread(self.data)
-        self.__send_server_thread = None
-        self.__wait_request_thread = None
+        super().__init__()
+        self.__read_plc_thread = threads.ReadPlcThread(self)
+        self.__send_data_set_thread = threads.SendDataSetThread(self)
+        self.__send_current_status_thread = threads.SendCurrentStatusThread(self)
 
-        self.base_time = time.time()
+        self.init_ui()
 
-    def sleep(self, sec):
-        distance = (time.time() - self.base_time) // sec
-        while True:
-            after = (time.time() - self.base_time) // sec
-            if after == distance + 1:
-                break
-            else:
-                time.sleep(sec/100)
-
-    def connect_plc(self):
-        self.client = ModbusTcpClient(self.plc_address, port=self.plc_port)
-        self.client.connect()
-
-    def disconnect_plc(self):
-        self.client.close()
-        self.client = None
-
-    def __read_plc_thread_func(self):
-        self.connect_plc()
-        while True:
-            data = self.read_plc()
-
-
-    def read_plc(self):
-        self.sleep(self.read_time)
-        when = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
-        data = self.client.read_holding_registers(0, 3)
-        if data.isError():
-            print("data read error!!")
-            return [when, None, None, None]
+    def set_FLAG_PLC_CONNECTION(self, flag):
+        self.__FLAG_PLC_CONNECTION = flag
+        if flag:
+            self.lb_plc_status.setStyleSheet('image:url(ui/green.png);')
         else:
-            return [when, data.registers[0], data.registers[1], data.registers[2]]
+            self.lb_plc_status.setStyleSheet('image:url(ui/red.png);')
+
+    def get_FLAG_SERVER_CONNECTION(self):
+        return self.__FLAG_SERVER_CONNECTION
+
+    def set_FLAG_SERVER_CONNECTION(self, flag):
+        self.__FLAG_SERVER_CONNECTION = flag
+        if flag:
+            self.lb_server_status.setStyleSheet('image:url(ui/green.png);')
+        else:
+            self.lb_server_status.setStyleSheet('image:url(ui/red.png);')
+
+    def init_ui(self):
+        self.setupUi(self)
+
+        self.le_server_address.setText(self.server_address)
+        self.le_server_port.setText(self.server_port)
+        self.le_plc_address.setText(self.plc_address)
+        self.le_plc_port.setText(self.plc_port)
+        self.lb_server_status.setStyleSheet('image:url(ui/red.png);')
+        self.lb_plc_status.setStyleSheet('image:url(ui/red.png);')
+
+        self.btn_stop.setEnabled(False)
+        self.btn_run.clicked.connect(self.btn_run_func)
+        self.btn_stop.clicked.connect(self.btn_stop_func)
+
+    def btn_run_func(self):
+        self.btn_run.setEnabled(False)
+        self.le_server_address.setEnabled(False)
+        self.le_server_port.setEnabled(False)
+        self.le_plc_address.setEnabled(False)
+        self.le_plc_port.setEnabled(False)
+        self.btn_stop.setEnabled(True)
+
+        self.server_address = self.le_server_address.text()
+        self.server_port = self.le_server_port.text()
+        self.plc_address = self.le_plc_address.text()
+        self.plc_port = self.le_plc_port.text()
+        self.run()
+
+    def btn_stop_func(self):
+        self.btn_run.setEnabled(True)
+        self.le_server_address.setEnabled(True)
+        self.le_server_port.setEnabled(True)
+        self.le_plc_address.setEnabled(True)
+        self.le_plc_port.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        self.stop()
+
+    def connect_server(self):
+        print(self.server_port)
+
+    def disconnect_server(self):
+        print(self.server_port)
+
+    def stop(self):
+        self.__read_plc_thread.kill()
+        self.__send_data_set_thread.kill()
+        self.__send_current_status_thread.kill()
+
+        self.disconnect_server()
 
     def run(self):
-        self.__read_plc_thread = threading.Thread(target=a, )
+        self.connect_server()
+
+        self.__read_plc_thread.start()
+        self.__send_data_set_thread.start()
+        self.__send_current_status_thread.start()
 
 
-def a():
-    return 1
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    edge_node = EdgeNode()
+    edge_node.show()
+    app.exec_()
 

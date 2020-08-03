@@ -49,7 +49,7 @@ def generate(base_current, base_voltage, base_wire_feed,
 
     for t in np.arange(0, final_ramp_duration, 0.1):
         final_current = rd.uniform(7.4, final_current)
-        final_voltage = rd.uniform(0, final_current)
+        final_voltage = rd.uniform(0, final_voltage)
         final_wire_feed = rd.uniform(0, final_wire_feed)
 
         new_data.append_data([final_current, final_voltage, final_wire_feed])
