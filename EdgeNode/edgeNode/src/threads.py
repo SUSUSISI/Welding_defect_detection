@@ -29,10 +29,6 @@ class CustomThread(Thread):
             else:
                 time.sleep(self.clock_time / 100)
 
-    def init_before_run(self):
-        self.FLAG_KILL = False
-        self.FLAG_PAUSE = False
-
     def pause(self):
         self.FLAG_PAUSE = True
 
@@ -44,71 +40,18 @@ class CustomThread(Thread):
 
 
 class SendCurrentStatusThread(CustomThread):
-    def __init__(self, server):
+
+    def __init__(self, send_current_stats_func):
         super().__init__()
-        self.server = server
+        self.func = send_current_stats_func
         self.clock_time = 1
 
     def run(self):
-        self.init_before_run()
         while not self.FLAG_KILL:
             self.sync()
-            self.server.send_current_status()
-            print(datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
+            self.func()
             while self.FLAG_PAUSE:
                 time.sleep(0.1)
-
-
-class Server(CustomThread):
-    sio = socketio.Client()
-
-    def __init__(self, data):
-        super().__init__()
-        self.data = data
-
-    def kill(self):
-        super().kill()
-        self.sio.disconnect()
-
-    def run(self):
-        self.init_before_run()
-
-        while not self.FLAG_KILL:
-            self.sync()
-            try:
-                # self.sio.connect('http://' + self.data.server_address +
-                #                  ":" + self.data.server_port)
-                self.sio.connect('http://localhost:5020')
-                self.data.set_FLAG_SERVER_CONNECTION(True)
-                self.data.write_log("서버와 연결되었습니다.")
-
-            except sioe.SocketIOError:
-                self.data.write_log("서버와 연결이 되지 않습니다.")
-
-            while self.FLAG_PAUSE:
-                time.sleep(0.1)
-
-    def send_current_status(self):
-        print("send current status ")
-
-    def send_data_set(self, file_path):
-        print("send data set")
-
-    @sio.event
-    def connect_error(self):
-        print("Server Connection Error")
-
-        # 그냥 빨간불 파란불만 건드리기 + log
-
-    @sio.event
-    def connect(self):
-        print("Server Connected")
-        # 그냥 빨간불 파란불만 건드리기
-
-    @sio.event
-    def disconnect(self):
-        print("DisConnected")
-        # 그냥 빨간불 파란불만 건드리기
 
 
 def save_data(data, path):
@@ -124,31 +67,25 @@ def save_data(data, path):
 
     file_path = path + "process_" + str(data.process_id) + ".csv"
     fd.GTAW.save_welding_data(data, file_path)
-    return file_path
+    return data.process_id, file_path
 
 
 class SendDataSetThread(CustomThread):
-    def __init__(self, data):
+    def __init__(self, edge_node):
         super().__init__()
-        self.data = data
-        self.clock_time = 1
+        self.edge_node = edge_node
 
-    def send_to_server(self):
-        file_path = self.save_data_set()
-        self.data.server.send_data_set(file_path)
-
-    def save_data_set(self):
-        file_path = save_data(self.data.done_data_set, self.data.path)
-        self.data.done_data_set = None
-        self.data.write_log("DATA SET 저장 (" + file_path + ")")
-        return file_path
+    def send_data_set(self):
+        pid, file_path = save_data(self.edge_node.done_data_set, self.edge_node.path)
+        self.edge_node.log_plc("파일이 저장되었습니다 (" + file_path +")")
+        self.edge_node.done_data_set = None
+        self.edge_node.send_data_set(pid, file_path)
 
     def run(self):
-        self.init_before_run()
         while not self.FLAG_KILL:
-            self.sync()
-            if self.data.done_data_set is not None:
-                self.send_to_server()
+            time.sleep(0.5)
+            if self.edge_node.done_data_set is not None:
+                self.send_data_set()
 
             while self.FLAG_PAUSE:
                 time.sleep(0.1)
@@ -169,7 +106,7 @@ class ReadPlcThread(CustomThread):
         self.data.plc_client = ModbusTcpClient(self.data.plc_address, port=self.data.plc_port)
         if self.data.plc_client.connect():
             self.data.set_FLAG_PLC_CONNECTION(True)
-            self.data.write_log("PLC 연결 성공")
+            self.data.log_plc("PLC 연결 성공")
             
     def disconnect_plc(self):
         self.data.plc_client.close()
@@ -182,16 +119,16 @@ class ReadPlcThread(CustomThread):
             read_data = self.data.plc_client.read_holding_registers(0, 3)
             self.data.set_FLAG_PLC_CONNECTION(True)
             if read_data.isError():
-                self.data.write_log("Data Read Error")
+                self.data.log_plc("Data Read Error")
                 return when, [None, None, None]
             else:
                 cur = read_data.registers[0]/100
                 vol = read_data.registers[1]/100
                 wir = read_data.registers[2]/100
-                print(cur, ", ", vol, ", ", wir)
-                return when, [read_data.registers[0]/100, read_data.registers[1]/100, read_data.registers[2]/100]
+
+                return when, [cur, vol, wir]
         except pme.ConnectionException:
-            self.data.write_log("PLC Connection Error")
+            self.data.log_plc("PLC Connection Error")
             self.data.set_FLAG_PLC_CONNECTION(False)
             return when, [None, None, None]
 
@@ -208,7 +145,6 @@ class ReadPlcThread(CustomThread):
             return False
 
     def run(self):
-        self.init_before_run()
         self.connect_plc()
 
         while not self.FLAG_KILL:
@@ -225,7 +161,8 @@ class ReadPlcThread(CustomThread):
                 if is_welding_data is not False:
                     self.add_data_to_data_set()
                 else:
-                    self.data.FLAG_WELDING = False
+                    self.data.log_plc("용접이 끝났습니다.")
+                    self.data.set_FLAG_WELDING(False)
                     self.data.PID += 1
                     self.data.done_data_set = self.data.data_set
                     self.data.data_set = None
@@ -234,7 +171,8 @@ class ReadPlcThread(CustomThread):
                 if is_welding_data is True:
                     self.data.data_set = fd.GTAW.GTAW_data()
                     self.data.data_set.process_id = self.data.PID
-                    self.data.FLAG_WELDING = True
+                    self.data.log_plc("용접이 시작되었습니다.")
+                    self.data.set_FLAG_WELDING(True)
 
             while self.FLAG_PAUSE:
                 time.sleep(0.1)
