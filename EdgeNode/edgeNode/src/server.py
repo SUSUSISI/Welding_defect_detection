@@ -2,8 +2,6 @@ import socketio
 import socketio.exceptions as sioe
 import threads
 import time
-import asyncio
-import aiohttp
 
 sio = socketio.Client()
 
@@ -21,7 +19,7 @@ class ServerConnectionThread(threads.CustomThread):
     def run(self):
         while not self.FLAG_KILL:
             if sio.connected is False:
-                time.sleep(0.1)
+                time.sleep(1)
                 try:
                     connect_server(self.address, self.port)
                 except sioe.SocketIOError:
@@ -79,11 +77,8 @@ def kill():
 
 
 def connect_server(address, port):
-    try:
-        sio.connect('http://' + address +
-                    ":" + port)
-    except sioe.SocketIOError:
-        print("Server Connection Error")
+    sio.connect('http://' + address +
+                ":" + port, namespaces=['/node'])
 
 
 def send_current_status(flag, data):
@@ -93,7 +88,7 @@ def send_current_status(flag, data):
                                                          'wire_feed': data[2]}})
 
 
-def send_data_set(file_path, pid):
+def send_data_set(pid, file_path):
     print("send data set")
     with open(file_path, 'rb') as f:
         data = f.read()

@@ -27,8 +27,8 @@ class EdgeNode(QMainWindow, form_class):
     plc_port = '5020'
     plc_client = None
 
-    server_address = '123.123.123.123'
-    server_port = '5020'
+    server_address = '192.168.1.102'
+    server_port = '5000'
 
     FLAG_WELDING = False
     __FLAG_PLC_CONNECTION = False
@@ -59,8 +59,12 @@ class EdgeNode(QMainWindow, form_class):
 
     def server_data_request_callback_func(self, flag, speed):
         self.set_FLAG_SERVER_DATA_REQUEST(flag)
+        print("Server Data Request")
+        print("Flag : ", flag)
+        print("Speed : ", speed)
+
         if self.__send_current_status_thread is not None:
-            self.__send_current_status_thread.clock_time = speed
+            self.__send_current_status_thread.set_clock_time(speed)
         if flag is False:
             self.lb_server_data_speed.setText('')
         else:
@@ -98,7 +102,7 @@ class EdgeNode(QMainWindow, form_class):
     def set_FLAG_SERVER_DATA_REQUEST(self, flag):
         self.__FLAG_SERVER_DATA_REQUEST = flag
         if flag:
-            self.lb_server_data_reqeust.setStyleSheet('image:url(ui/green.png);')
+            self.lb_server_data_request.setStyleSheet('image:url(ui/green.png);')
         else:
             self.lb_server_data_request.setStyleSheet('image:url(ui/red.png);')
 

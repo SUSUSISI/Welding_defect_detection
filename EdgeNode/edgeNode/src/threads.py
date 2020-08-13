@@ -20,14 +20,17 @@ class CustomThread(Thread):
         Thread.__init__(self)
         self.base_time = time.time()
 
-    def sync(self):
-        distance = (time.time() - self.base_time) // self.clock_time
+    def deep_sync(self, clock):
+        distance = (time.time() - self.base_time) // clock
         while True:
-            after = (time.time() - self.base_time) // self.clock_time
+            after = (time.time() - self.base_time) // clock
             if after == distance + 1:
                 break
             else:
-                time.sleep(self.clock_time / 100)
+                time.sleep(clock / 100)
+
+    def sync(self):
+        self.deep_sync(self.clock_time)
 
     def pause(self):
         self.FLAG_PAUSE = True
@@ -46,9 +49,14 @@ class SendCurrentStatusThread(CustomThread):
         self.func = send_current_stats_func
         self.clock_time = 1
 
+    def set_clock_time(self, speed):
+        print("Clock Time Change : ", speed)
+        self.clock_time = speed
+
     def run(self):
         while not self.FLAG_KILL:
             self.sync()
+            print("FUNC")
             self.func()
             while self.FLAG_PAUSE:
                 time.sleep(0.1)

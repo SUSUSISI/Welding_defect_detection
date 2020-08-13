@@ -5,8 +5,8 @@ from matplotlib import pyplot as plt
 m = wm.WeldingMachine("test", 0.1)
 
 
-def show_normal():
-    data = m.generate_normal_data(600).data
+def show_normal(duration=600):
+    data = m.generate_normal_data(duration).data
     plt.figure('normal data')
     plt.clf()
     plt.plot(data)
@@ -16,8 +16,8 @@ def show_normal():
     plt.show()
 
 
-def show_porosity():
-    data = m.generate_porosity_data(600).data
+def show_porosity(duration=600):
+    data = m.generate_porosity_data(duration).data
     plt.figure('porosity error data')
     plt.clf()
     plt.plot(data)
@@ -27,8 +27,8 @@ def show_porosity():
     plt.show()
 
 
-def show_undercut():
-    data = m.generate_undercut_data(600).data
+def show_undercut(duration=600):
+    data = m.generate_undercut_data(duration).data
     plt.figure('undercut error data')
     plt.clf()
     plt.plot(data)
@@ -38,8 +38,8 @@ def show_undercut():
     plt.show()
 
 
-def show_undercurrent():
-    data = m.generate_undercurrent_data(600).data
+def show_undercurrent(duration=600):
+    data = m.generate_undercurrent_data(duration).data
     plt.figure('undercurrent error data')
     plt.clf()
     plt.plot(data)
@@ -49,8 +49,8 @@ def show_undercurrent():
     plt.show()
 
 
-def show_mechanical():
-    data = m.generate_mechanical_data(600).data
+def show_mechanical(duration=600):
+    data = m.generate_mechanical_data(duration).data
     plt.figure('mechanical error data')
     plt.clf()
     plt.plot(data)
