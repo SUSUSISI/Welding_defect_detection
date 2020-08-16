@@ -1,38 +1,25 @@
-from flask import Flask, jsonify, render_template, redirect
-from flask_restplus import Resource, Api
+from flask import Flask, jsonify, render_template
 from flask import request
-from flask_pymongo import PyMongo
 from flask_socketio import send, SocketIO, emit
-from flask_socketio import join_room, leave_room
-import csv
-
+from flask_socketio import join_room
+import pandas as pd
+from flask_pymongo import PyMongo
+from flask_login import current_user
 
 app = Flask(__name__)
 # api = Api(app) # api 사용시, swagger.
 app.config["MONGO_URI"] = "mongodb://localhost:27017/welding_defect_dection"
-mongo = PyMongo(app)
+app.config['SESSION_TYPE'] = 'filesystem'
 socketio = SocketIO(app)
-ROOMS = [] # 필요한지 모르겠지만 일단 Room 해두자.
+mongo = PyMongo(app)
 
+welding_db = mongo.db.welding_data
+node_db = mongo.db.node_data
 
-# 노드는 무조건 Room에 입장한다.
-# 그리고 끊임없이 Room안에서 소켓을 통해 서버로 데이터를 전송한다.
-# 서버는 DB에 노드가 등록되어 있을 경우에만 데이터를 받아 웹으로 전송한다.
-# connect은 서버의 ip주소 : 'http://localhost:5000'이걸로 연결하고
-# client는 create를 호출할때 자신의 port번호를 알려줘야한다.
-# Node의 room이름은 room + port 번호로 정한다.
-@socketio.on('create')
-def on_create(data):
-    """Create a game lobby"""
+# key: Node_ip, value: Node_sid
+connected_nodeList = {}
 
-    port = data['port']
-    room_num = 'room' + str(port)
-    join_room(room_num)
-    ROOMS.append(room_num)
-    # 내 생각에는 join_room이라는 message를 room_num의 room에 보낸다.
-    send('join_room', room=room_num)
-
-# 웹 테스트 용
+#   웹 테이블 테스트
 @app.route("/temp", methods=['POST'])
 def temp():
     data1 = {
@@ -76,157 +63,151 @@ def temp():
         "ip_address": "110.1.138.115",
         "money": "50252.57"}]}
 
+#   형우가 준 데이터 테스트 용
+def test_transmit_data():
+    # data = pd.read_csv("./test.csv")
+    node_ip = 'node_ipp'
+    if welding_db.find_one({'node_ip': node_ip}):
+        weldingDataFrame = pd.read_csv("./test.csv")
+        # 동일 아이피 존재하지는 확인하고 나면, 만들어야지.
+        welding_db.find_one_and_update({'node_ip': node_ip},
+                                       {'$push': {'processes': {'label': 'temp_label',
+                                                                'process_id': int(weldingDataFrame['Process ID'][0]),
+                                                                'prediction': [],
+                                                                'dataList': []}
+                                                  }
+                                        })
 
-@app.route("/register", methods=['POST'])
-def register():
+        for rowData in weldingDataFrame.iterrows():
+            welding_db.find_one_and_update({'node_ip': node_ip, 'processes.process_id': 1},
+                                           # {'$set': {'processes.$.dataList': 'youwan'}}, upsert=True)
+                                           {'$push': {'processes.$.dataList': {"date": rowData[1][1],
+                                                                              "current": rowData[1][3],
+                                                                              "voltage": rowData[1][4],
+                                                                              "wireFeed": rowData[1][5]}}},
+                                           upsert=True)
+
+#   ********************************************************************************************************************
+
+#   description(input) : ""
+#   speed(default) : 1
+#   node_ip : 웹에서 입력하는 node ip
+#   node_id : 웹에서 입력하는 node id
+#   processes : Array
+#   { node_ip : node_sid }
+@app.route("/register_node", methods=['POST'])
+def register_node():
     if request.method == 'POST':
-        node_name = request.args.get('node_name')
-        port_num = request.args.get('port_num')
-        interval = request.args.get('interval') # 이건 고민 좀 해보자
-        description = request.args.get('description') # 일단 있어서 추가.
+        print("hello")
+        node_id = request.args.get('node_id')
+        description = request.args.get('description')
+        speed = 1
+        # web_ip = request.remote_addr
+        node_ip = request.args.get('node_ip')
 
-        if mongo.db.node_data.find({'port_num', port_num}).count() == 0:
-            return "port가 존재하지 않습니다. port번호를 확인해주세요."
+        # 무조건 등록.
+        data = {'node_id': node_id, 'node_ip': node_ip,
+                'speed': speed, 'description': description,
+                'processes': []}
+        welding_db.insert_one(data)
 
-        # node_id가 필요한지 한번 더 확인해보고
-        # 형우랑 필요한거 정리하기.
-        node_id = "node_" + str(port_num)
+        # 등록 후 체크해서 확인
+        if node_ip in connected_nodeList.keys():
+            emit('data_request', {"request": True, 'speed': data['speed']}, room=connected_nodeList['node_ip'])
 
-        data = {"node_id": node_id,
-                "node_name": node_name,
-                "node_port": port_num,
-                "state": "stopped",
-                "interval": interval,
-                "description": description,
-                "process": [{
-                    "process_id": "process_dummy"}]}
-
-        print(mongo.db.welding_data.insert_one(data))
-        # 등록이 완료되면 node_id를 가진 room으로 message를 보낸다.
-        # client는 register를 사전에 등록하여 듣고 있어야 한다.
-        # 듣고나면 client는 곧바로 데이터 전송을 시작한다.
-        # message, interval, room_num를 data로 보낸다.
-        socketio.emit('register', {'message': 'node register sucess', "interval": interval, 'room_num': node_id}, room=node_id)
         return "node register success"
 
-# node는 등록전 사전에 room에 접속해있다.
-# node는 room안에서 지속적으로 서버로 데이터를 보낸다.
-# server에서는 node_id == romm_id
-# node는 data를 다음과 같은 형태로 보낸다.
-# {"current": 111.1, "voltage": 111.1, "wire_feed": 1111.1}
+#   노드 삭제할 때, 호출
+@app.route("/delete_node", methods=['POST'])
+def delete_node():
+    node_ip = request.args.get('node_ip')
+    welding_db.delete_many({'node_ip': node_ip})
+
+#   Connect Web
+#   웹이 필요한 데이터 보내줘야
+@socketio.on("connect", namespace='/web')
+def connect():
+    print("connected with web", request.sid, request.remote_addr)
+
+@socketio.on("disconnect", namespace='/web')
+def disconnect():
+    print("disconnect Web", request.sid, request.remote_addr)
+
+#   Connection
+#   노드와 커넥션되면 connectedNodeList에 노드 정보 저장
+#   Welding_DB에 노드정보 있는지 확인하고 유무에 따라 처리.
+@socketio.on("connect", namespace='/node')
+def connect():
+    print("connected node", request.sid, request.remote_addr)
+    node_sid = request.sid
+    node_ip = request.remote_addr
+    connected_nodeList[node_ip] = node_sid
+    check_registered_node_and_emit(node_ip, node_sid)
+
+#   Disconnect Node
+#   노드와 연결해제되면 connectNodeList에서 제거.
+#   웹에 커넥션이 해제됨을 알려줘야함.
+@socketio.on("disconnect", namespace='/node')
+def disconnect():
+    print("disconnect Node", request.sid, request.remote_addr)
+    node_sid = request.sid
+    node_ip = request.remote_addr
+    connected_nodeList.pop(node_ip)
+    # 여기에다가 추가하세요.
+
+#   check_registered_node_and_emit 함수
+#   welding_data( 웹에서 등록한 노드 )에 해당 ip주소가 있는지 파악.
+#   *호출 시기*
+#   1) 엣지노드 Connection 이 있을때
+#   2) 웹에서 엣지노드 등록 할때
+#   3) speed 바꿀 때
+def check_registered_node_and_emit(ip, sid):
+    welding_data = welding_db.find_one({'node_ip': ip})
+    if welding_data is None:
+        emit('data_request', {"request": False, 'speed': 1}, room=sid)
+    else:
+        emit('data_request', {"request": True, 'speed': welding_data['speed']}, room=sid)
+
+#   파일 받고 DB에 저장하는 함수.
+
+#   (pd.read_csv(data["data"]))[1] 데이터 형식. 참고 ) [0] --> order number
+#   Data No.                                   1 "data_number": 0         0
+#   Date              2020-08-08 19:03:27.022213 "date": "2020.02.02"     1
+#   Process ID                                 3                          2
+#   Avg. Current                          100.83 "avg_current": 1000,     3
+#   Avg. Voltage                           17.32 "avg_voltage": 111.1     4
+#   Avg. Wire Feed                          4.09 "avg_wireFeed": 1111.1   5
+#   Prediction                               NaN
+#   Label                                    NaN
+#   Name: 0, dtype: object
+#   ------------------------------------------------------------------------
+#   DB TEST
+#   welding_db.find_one_and_update({'node_ip': 'node_ip', 'processes.process_id': 1},
+#                                   {'$set': {'processes.$.label': 'youwan'}}, upsert=True)
 @socketio.on('transmit_data')
 def transmit_data(data):
-    node_id = data['node_id']
-    print(node_id)
-    # cursor = mongo.db.welding_data.find({})
-    # flag = False
-    # for item in cursor:
-    #     if item['node_id'] == node_id:
-    #         flag = True
-    #         break
-    # if flag:
-    #     # 노드 등록 확인 완료.
-    #     # 등록 되어 있으면 전송할때 받아서 다시 웹으로 넘겨줘!!!!!!
-    #     emit("transmit_data_to_web", {"node_id": node_id,
-    #                                   "data": {"current": data['current'], "voltage": data['voltage'], "wire_feed": data['wire_feed']}})
-    #     print("")
+    node_ip = request.remote_addr
+    if welding_db.find_one({'node_ip': request.node_ip}):
+        weldingDataFrame = pd.read_csv(data["data"])
+        # 등록할때는 processes가 empty Array이기 때문에 여기서 채워준다.
+        welding_db.find_one_and_update({'node_ip': node_ip},
+                                       {'$push': {'processes': {'label': 'temp_label',
+                                                                'process_id': int(weldingDataFrame['Process ID'][0]),
+                                                                'prediction': [],
+                                                                'dataList': []}
+                                                  }
+                                        })
+        for rowData in weldingDataFrame.iterrows():
+            welding_db.find_one_and_update({'node_ip': node_ip, 'processes.process_id': rowData[2]},
+                                           {'$push': {'processes.$.dataList': {"date": rowData[1],
+                                                                               "current": rowData[3],
+                                                                               "voltage": rowData[4],
+                                                                               "wireFeed": rowData[5]}
+                                                     }
+                                            }, upsert=True)
 
-
-# Connect
-# 처음 connect될 때,
-# 노드의 request.sid, request.remote_addr, 노드가 가지고 있을 포트번호.
-# 연결되면 서버에서 노드한테 메세지를 보내고,
-# 노드는 다시 서버한테 본인이 가지고 있는 포트번호를 보내.
-# 포트번호 : 노드의 sid 연결
-@socketio.on("connect")
-def connect():
-    print("connected ", request.sid, request.remote_addr)
-    emit("connect_message", {"message": "server connected"}, room=request.sid)
-
-# Connect CallBack
-# connect되고나면 노드는 connect_callBack함수로
-# node_sid와 port_num를 db에 저장한다.
-@socketio.on("connect_callBack")
-def callBack(data):
-    port_num = data["port_num"]
-    mongo.db.node_data.update({'$push': {'node_sid': request.sid, 'port_num': port_num}})
-
-
-@socketio.on("callBack")
-def callBack(data):
-    print("hello")
-
-
-    # f = open("/Users/wanni/PycharmProjects/Welding_defect_detection/test.csv", 'wb')
-    # f.write(data["data"])
-    # f.close()
-
-
-
-@app.route("/process_state", methods=['GET', 'POST'])
-def process_state():
-    if request.method == 'GET':
-        process_id = request.args.get('process_id')
-        process_state = request.args.get('process_state')
-
-
-@app.route("/allId", methods=['GET'])
-def process_ids():
-    if request.method == 'GET':
-        # post body value
-
-        cursor = mongo.db.welding_data.find({})
-        print(cursor)
-        ids = []
-        for item in cursor:
-            ids.append(item['id'])
-        return jsonify(ids)
-
-
-@app.route("/process", methods=['GET', 'POST'])
-def process():
-    print(request.environ.get('REMOTE_PORT'))
-    if request.method == 'GET':
-        process_id = request.args.get('process_id')
-
-        if mongo.db.welding_data.find({"id": process_id}).count() == 0:
-            return '해당 id를 찾을 수 없습니다.'
-
-        data = mongo.db.welding_data.find_one_or_404({"id": process_id})
-        process_data = {'id': data['id'], 'data': data['data']}
-        return jsonify(process_data)
-    else:
-        body = request.json
-        print(body)
-
-        process_id = request.args.get('process_id')
-        if mongo.db.welding_data.find({"id": process_id}).count() == 0:
-            return '해당 id를 찾을 수 없습니다.'
-
-        for item in body['data']:
-            mongo.db.welding_data.update({'id': process_id}, {'$push': {'data': item}})
-            print("item", item)
-
-
-# Room에 무조건 Join해 있다가 DB에
-@socketio.on('join')
-def on_join(data):
-    # username = data['username']
-    print("connected ", request.sid, request.remote_addr)
-    # room = data[request.sid]
-    join_room(request.sid)
-    send(request.sid + ' has entered the room.', room=request.sid)
-
-
-@socketio.on('leave')
-def on_leave(data):
-    username = data['username']
-    room = data['room']
-    leave_room(room)
-    send(username + ' has left the room.', room=room)
-
-
-# Web Page Route
+#   ********************************************************************************************************************
+#   Web Page Route
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -239,41 +220,23 @@ def data_sheet():
 
 @app.route("/dataextract")
 def data_extract():
-  return render_template('dataextract.html')
+    return render_template('dataextract.html')
 
 
 @app.route("/defectanalysis")
 def defect_analysis():
-  return render_template('defectanalysis.html')
+    return render_template('defectanalysis.html')
 
 
 @app.route("/datalabel")
 def data_label():
-  return render_template('datalabel.html')
+    return render_template('datalabel.html')
 
 
 @app.route("/sensormanage")
 def sensor_manage():
-  return render_template('sensormanage.html')
+    return render_template('sensormanage.html')
 
 
-# @app.route("/templates/MOCK_DATA.json")
-# def sensor_manage():
-#   return 'MOCK_DATA.json'
-
-
-# 자기 아이피로 하면됨.
 if __name__ == '__main__':
-    socketio.run(app, host='127.0.0.1', debug=True)
-    # app.run(debug=True)
-
-# from flask import Flask, render_template
-
-# app = Flask(__name__)
-
-
-
-
-
-# if __name__ == '__main__':
-#     app.run(debug=True)
+    socketio.run(app, host='192.168.0.104', debug=True)
