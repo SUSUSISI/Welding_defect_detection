@@ -1,13 +1,22 @@
+#   개발 현황
+#   1. 웹에서 노드 등록하는 기능
+#   2. 웹에서 노드 삭제하는 기능
+#   3. 웹과 서버 사이의 socket.io 연결
+#   4. 웹과 서버 사이의 socket.io 연결 해제
+#   5. 노드와 서버 사이의 socket.io 연결
+#   6. 노드와 서버 사이의 socket.io 연결 해재
+#   7. 노드에서 csv파일 전송 시 DB에 저장하는 기능
+#   8. 노드에서 실시간 데이터 전송시 웹으로 실시간으로 전송하는 기능 ( 테스트 필요 )
+#   ********************************************************************************************************************
+
+
 from flask import Flask, jsonify, render_template
 from flask import request
 from flask_socketio import send, SocketIO, emit
-from flask_socketio import join_room
 import pandas as pd
 from flask_pymongo import PyMongo
-from flask_login import current_user
 
 app = Flask(__name__)
-# api = Api(app) # api 사용시, swagger.
 app.config["MONGO_URI"] = "mongodb://localhost:27017/welding_defect_dection"
 app.config['SESSION_TYPE'] = 'filesystem'
 socketio = SocketIO(app)
@@ -150,7 +159,6 @@ def connect():
 @socketio.on("disconnect", namespace='/node')
 def disconnect():
     print("disconnect Node", request.sid, request.remote_addr)
-    node_sid = request.sid
     node_ip = request.remote_addr
     connected_nodeList.pop(node_ip)
     # 여기에다가 추가하세요.
@@ -184,7 +192,7 @@ def check_registered_node_and_emit(ip, sid):
 #   DB TEST
 #   welding_db.find_one_and_update({'node_ip': 'node_ip', 'processes.process_id': 1},
 #                                   {'$set': {'processes.$.label': 'youwan'}}, upsert=True)
-@socketio.on('transmit_data')
+@socketio.on('transmit_data')  # ---> 이거 확인해봐야함.
 def transmit_data(data):
     node_ip = request.remote_addr
     if welding_db.find_one({'node_ip': request.node_ip}):
@@ -203,8 +211,17 @@ def transmit_data(data):
                                                                                "current": rowData[3],
                                                                                "voltage": rowData[4],
                                                                                "wireFeed": rowData[5]}
-                                                     }
+                                                      }
                                             }, upsert=True)
+
+#   Node에서 보내준 실시간 데이터
+#   real_time_data 네임스페이스로 전송
+#   broadcast는 모든 client에 보내서 namespace로 한정.
+#   event 이름 까먹음
+@socketio.on('what??')
+def temp_data(data):
+    real_time_data = data['data']
+    emit('send_data_to_web', {'data': real_time_data}, namespace='/real_time_data')
 
 #   ********************************************************************************************************************
 #   Web Page Route
