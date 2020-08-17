@@ -1,5 +1,0 @@
-Data No.,Date,Process ID,Avg. Current,Avg. Voltage,Avg. Wire Feed,Prediction,Label
-1,2020-08-08 18:06:54.019941,1,21.24,3.26,1.24,null,null
-2,2020-08-08 18:06:54.119929,1,11.37,1.89,0.43,null,null
-3,2020-08-08 18:06:54.218938,1,10.55,0.29,0.17,null,null
-4,2020-08-08 18:06:54.318945,1,9.51,0.13,0.09,null,null

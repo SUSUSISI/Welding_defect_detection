@@ -33,11 +33,13 @@ class GTAW_data:
             #     new_data = np.array([float(e) for e in row[3:6]])
             #     self.__data = np.concatenate((self.__data, np.array([new_data])))
 
-    def append_data(self, _time, _data):
+    def append_data(self, _data, _time=None):
         if isinstance(_time, str):
             self.__time.append(datetime.strptime(_time, '%Y-%m-%d %H:%M:%S.%f'))
         elif isinstance(_time, datetime):
             self.__time.append(_time)
+        elif _time is None:
+            self.__time.append(datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f'))
         else:
             raise InputError('time must be datetime or string formated \%Y-\%m-\%d \%H:\%M:\%S.\%f')
 
@@ -82,7 +84,10 @@ class GTAW_data:
 
     @process_id.setter
     def process_id(self, _process_id):
-        self.__process_id = int(_process_id)
+        try:
+            self.__process_id = int(_process_id)
+        except ValueError:
+            self.__process_id = None
 
     # @data.setter
     # def data(self, _data):
@@ -97,7 +102,7 @@ class GTAW_data:
         self.__label = _label
 
 
-def read_GTAW_welding_data(path):
+def read_GTAW_welding_data_list(path):
     data = []
 
     file = open(path, 'r', encoding='utf-8')
@@ -113,7 +118,7 @@ def read_GTAW_welding_data(path):
     for row in reader:
         if new_data.process_id is not None:
             if int(row[2]) == new_data.process_id:
-                new_data.append_data(row[1], [row[3], row[4], row[5]])
+                new_data.append_data([row[3], row[4], row[5]], row[1])
             else:
                 data.append(new_data)
                 new_data = GTAW_data()
@@ -122,7 +127,7 @@ def read_GTAW_welding_data(path):
             new_data.process_id = row[2]
             new_data.prediction_label = row[6]
             new_data.label = row[7]
-            new_data.append_data(row[1], [row[3], row[4], row[5]])
+            new_data.append_data([row[3], row[4], row[5]], row[1])
 
     data.append(new_data)
     file.close()
@@ -142,14 +147,40 @@ def save_GTAW_welding_data_list(data, path):
 
         curr_data = e.data
 
-        for i in curr_data:
-            row = [data_index, e.time[i], e.process_id, round(i[0], 1), round(i[1], 1),
-                   round(i[2], 1), e.prediction_label, e.label]
+        for i in range(len(curr_data)):
+            row = [data_index, e.time[i], e.process_id, round(curr_data[i][0], 1), round(curr_data[i][1], 1),
+                   round(curr_data[i][2], 1), e.prediction_label, e.label]
             writer.writerow(row)
 
             data_index += 1
 
     file.close()
+
+
+def read_GTAW_welding_data(path):
+
+    file = open(path, 'r', encoding='utf-8')
+    reader = csv.reader(file)
+
+    first_row = next(reader)
+
+    if len(first_row) != 8:
+        raise InputError(
+            'Input data must be list with length 8 which consist of [data_id, date, process_id, avg_curr, avg_volt, avg_wire, prediction, label]')
+
+    data = GTAW_data()
+    for row in reader:
+        if data.process_id is not None:
+            data.append_data([row[3], row[4], row[5]], row[1])
+        else:
+            data.process_id = row[2]
+            data.prediction_label = row[6]
+            data.label = row[7]
+            data.append_data([row[3], row[4], row[5]], row[1])
+
+    file.close()
+
+    return data
 
 
 def save_welding_data(data, path):
@@ -171,52 +202,52 @@ def save_welding_data(data, path):
     file.close()
 
 
-def merge_GTAW_datasets(_paths, _target):
-    data = []
-
-    for path in _paths:
-        file = open(path, 'r', encoding='utf-8')
-        reader = csv.reader(file)
-
-        first_row = next(reader)
-
-        if len(first_row) != 8:
-            raise InputError(
-                'Input data must be list with length 8 which consist of [data_id, date, process_id, avg_curr, avg_volt, avg_wire, prediction, label], file name: {}'.format(
-                    path))
-
-        new_data = GTAW_data()
-        for row in reader:
-            if new_data.process_id != None:
-                if int(row[2]) == new_data.process_id:
-                    new_data.append_data(row)
-                else:
-                    data.append(new_data)
-                    new_data = GTAW_data()
-
-            if new_data.process_id == None:
-                new_data.time = row[1]
-                new_data.process_id = row[2]
-                new_data.prediction_label = row[6]
-                new_data.label = row[7]
-                new_data.append_data(row)
-
-        data.append(new_data)
-        file.close()
-
-    save_GTAW_welding_data_list(data, _target)
-
-
-# def generate_noised_data(base_lines, noise_ratio=0.05):
-#     noise_current = np.random.normal(-noise_ratio, noise_ratio)
-#     noise_voltage = np.random.normal(-noise_ratio, noise_ratio)
-#     noise_wire_feed = np.random.normal(-0.01, 0.01)
+# def merge_GTAW_datasets(_paths, _target):
+#     data = []
 #
-#     current = round(base_lines[0] + base_lines[0] * noise_current, 1)
-#     voltage = round(base_lines[1] + base_lines[1] * (noise_voltage + noise_current), 1)
-#     wire_feed = round(base_lines[2] + base_lines[2] * (noise_wire_feed + noise_current), 1)
+#     for path in _paths:
+#         file = open(path, 'r', encoding='utf-8')
+#         reader = csv.reader(file)
 #
-#     return np.array([current, voltage, wire_feed])
+#         first_row = next(reader)
+#
+#         if len(first_row) != 8:
+#             raise InputError(
+#                 'Input data must be list with length 8 which consist of [data_id, date, process_id, avg_curr, avg_volt, avg_wire, prediction, label], file name: {}'.format(
+#                     path))
+#
+#         new_data = GTAW_data()
+#         for row in reader:
+#             if new_data.process_id != None:
+#                 if int(row[2]) == new_data.process_id:
+#                     new_data.append_data(row)
+#                 else:
+#                     data.append(new_data)
+#                     new_data = GTAW_data()
+#
+#             if new_data.process_id == None:
+#                 new_data.time = row[1]
+#                 new_data.process_id = row[2]
+#                 new_data.prediction_label = row[6]
+#                 new_data.label = row[7]
+#                 new_data.append_data(row)
+#
+#         data.append(new_data)
+#         file.close()
+#
+#     save_GTAW_welding_data_list(data, _target)
+
+
+def generate_noised_data(base_lines, noise_ratio=0.05):
+    noise_current = np.random.normal(-noise_ratio, noise_ratio)
+    noise_voltage = np.random.normal(-noise_ratio, noise_ratio)
+    noise_wire_feed = np.random.normal(-0.01, 0.01)
+
+    current = round(base_lines[0] + base_lines[0] * noise_current, 1)
+    voltage = round(base_lines[1] + base_lines[1] * (noise_voltage + noise_current), 1)
+    wire_feed = round(base_lines[2] + base_lines[2] * (noise_wire_feed + noise_current), 1)
+
+    return np.array([current, voltage, wire_feed])
 
 
 def onehot_GTAW_labels(_data, _label_list):

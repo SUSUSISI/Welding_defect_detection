@@ -141,7 +141,7 @@ class ReadPlcThread(CustomThread):
             return when, [None, None, None]
 
     def add_data_to_data_set(self):
-        self.data.data_set.append_data(self.data.current_time, self.data.current_data)
+        self.data.data_set.append_data(self.data.current_data, self.data.current_time)
 
     def check_current_data(self):
         if self.data.current_data[0] is None:
