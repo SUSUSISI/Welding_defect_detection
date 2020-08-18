@@ -27,6 +27,25 @@ n_time_steps = 128  # 0.1초 data * 100 = 10초
 n_features = 3  # current, voltage, wire_feed
 
 
+def show_data(data):
+    plt.figure('Welding data')
+    plt.clf()
+    plt.plot(data)
+    plt.legend(['Current', 'Voltage', "Wire_feed"])
+    plt.xlabel('Time (0.1 sec)')
+    plt.title('Welding data')
+    plt.show()
+
+
+def cut_padding(data, defect_init, defect_end):
+    length = data.shape[0]
+    data = np.array(data[50:length-50])
+    defect_init -= 50
+    defect_end -= 50
+
+    return data, defect_init, defect_end
+
+
 def generate_data(num=500, duration=60):
     x_reshaped_data = []
     y_data = []
@@ -34,22 +53,33 @@ def generate_data(num=500, duration=60):
         data, defect_init, defect_end = m.generate_welding_data(duration)
         label = data.label
         data = data.data
+        data, defect_init, defect_end = cut_padding(data, defect_init, defect_end)   # cut padding
+        # show_data(data)
+        # print(defect_init, ", ", defect_end)
         re_data = reshape_data(data)
         x_reshaped_data = x_reshaped_data + re_data
         y_data = y_data + get_y_data(re_data, label, defect_init, defect_end)
 
-    print("0 : ", y_data.count(0))
-    print("1 : ", y_data.count(1))
-    print("2 : ", y_data.count(2))
-    print("3 : ", y_data.count(3))
-    print("4 : ", y_data.count(4))
-    print("5 : ", y_data.count(5))
-    print("6 : ", y_data.count(6))
+    print("0 : ", y_data.count(1))
+    print("1 : ", y_data.count(2))
+    print("2 : ", y_data.count(3))
+    print("3 : ", y_data.count(4))
+    print("4 : ", y_data.count(5))
+    # print("5 : ", y_data.count(5))
+    # print("6 : ", y_data.count(6))
 
     x_reshaped_data = np.array(x_reshaped_data)
     y_data = np.array(y_data)
+    y_data = y_data - 1  # cut padding
 
     return x_reshaped_data, y_data
+
+
+def predict_welding_data_set(data, model):
+    length = data.shape[0]
+    data = np.array(data[50:length - 50])
+    x_reshaped_data = reshape_data(data)
+    result = model.predict(x_reshaped_data)
 
 
 def save_x_data(x_data):
@@ -72,7 +102,7 @@ def save_LSTM_data(x_reshaped_data, y_data, prefix=''):
     pd.DataFrame(x_data_list[0].reshape((-1, 128))).to_csv(base_path+prefix+current_file_name, index=False, header=False, sep=' ')
     pd.DataFrame(x_data_list[1].reshape((-1, 128))).to_csv(base_path+prefix+voltage_file_name, index=False, header=False, sep=' ')
     pd.DataFrame(x_data_list[2].reshape((-1, 128))).to_csv(base_path+prefix+wire_feed_file_name, index=False, header=False, sep=' ')
-    save_y_data(y_data,base_path+prefix+y_file_name)
+    save_y_data(y_data, base_path+prefix+y_file_name)
 
 
 def load_LSTM_data(prefix=''):
@@ -104,9 +134,9 @@ def evaluate_model(train_x, train_y, test_x, test_y):
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     # fit network
     model.fit(train_x, train_y, epochs=epochs, batch_size=batch_size, verbose=verbose)
+
     # evaluate model
     _, accuracy = model.evaluate(test_x, test_y, batch_size=batch_size, verbose=verbose)
-    model.predict()
     return accuracy
 
 
@@ -196,10 +226,13 @@ def get_y_data(x_data, label, defect_init, defect_end):
                 end_pos = end_pos + 1
 
         for i in range(start_pos, end_pos):
-            y_data[i] = defect_label
+            if 0 <= i < len(y_data):
+                y_data[i] = defect_label
 
-    y_data[0] = 0
-    y_data[-1] = 6
+    # cut padding
+    # y_data[0] = 0
+    # y_data[-1] = 6
+
     return y_data
 
 
