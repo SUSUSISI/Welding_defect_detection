@@ -57,17 +57,17 @@ def connect_error(error):
     connection_callback_func(None)
 
 
-@sio.event
+@sio.event(namespace='/node')
 def connect():
     connection_callback_func(True)
 
 
-@sio.event
+@sio.event(namespace='/node')
 def disconnect():
     connection_callback_func(False)
 
 
-@sio.event
+@sio.event(namespace='/node')
 def data_request(data):
     data_request_callback_func(data['request'], data['speed'])
 
@@ -85,11 +85,12 @@ def send_current_status(flag, data):
     print("send current status ")
     sio.emit('current_status', {'status': flag, 'data': {'current': data[0],
                                                          'voltage': data[1],
-                                                         'wire_feed': data[2]}})
+                                                         'wire_feed': data[2]}}, namespace='/node')
 
 
 def send_data_set(pid, file_path):
     print("send data set")
+    print("pid : ", pid)
     with open(file_path, 'rb') as f:
         data = f.read()
-        sio.emit('data_set', {'data': data, 'process_id': pid})
+        sio.emit('data_set', {'data': data, 'process_id': pid}, namespace='/node')

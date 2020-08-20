@@ -75,12 +75,20 @@ def generate_data(num=500, duration=60):
     return x_reshaped_data, y_data
 
 
-def predict_welding_data_set(data, model):
+def predict_welding_data_set(path):
+    data_frame = fd.GTAW.read_GTAW_welding_data(path)
+    data = data_frame.data
     length = data.shape[0]
     data = np.array(data[50:length - 50])
-    x_reshaped_data = reshape_data(data)
-    result = model.predict(x_reshaped_data)
+    # 1. data 에 결함이 있는지 확인
+    # 2. data 에 결함이 있다고 확인이 된 부분이 어떤결함인지 확인
 
+    x_reshaped_data = reshape_data(data)
+
+
+def find_defect(data, model):
+    # predict_list = model.pridect(data)
+    predict_list = load_file()
 
 def save_x_data(x_data):
     data_frame = fd.GTAW.GTAW_data()

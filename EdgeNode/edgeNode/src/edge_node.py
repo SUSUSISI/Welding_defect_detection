@@ -19,15 +19,15 @@ class EdgeNode(QMainWindow, form_class):
     PID = 1
     data_set = None
     current_time = None
-    current_data = None
+    current_data = [None, None, None]
     done_data_set = None
     path = "data/started_" + datetime.now().strftime('%Y_%m_%d_%H%M%S') + "/"
 
-    plc_address = '172.30.1.20'
+    plc_address = 'localhost'
     plc_port = '5020'
     plc_client = None
 
-    server_address = '192.168.1.102'
+    server_address = '172.20.10.4'
     server_port = '5000'
 
     FLAG_WELDING = False
@@ -88,9 +88,11 @@ class EdgeNode(QMainWindow, form_class):
         self.tb_log_plc.moveCursor(QTextCursor.End)
 
     def log_server(self, msg):
+        print(msg)
         when = datetime.now().strftime('[%Y_%m_%d %H:%M:%S]: ')
         self.tb_log_server.append(when + msg)
-        self.tb_log_server.moveCursor(QTextCursor.End)
+        # self.tb_log_server.moveCursor(QTextCursor.End)
+        # 커서에서 문제가 있는듯?
 
     def set_FLAG_WELDING(self, flag):
         self.FLAG_WELDING = flag

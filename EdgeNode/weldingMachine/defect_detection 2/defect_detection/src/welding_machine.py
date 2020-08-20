@@ -107,7 +107,7 @@ class WeldingMachine:
                 self.send_data([curr, volt, wire])
 
             self.generate_next_data()
-            self.current_data.time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
+            # self.current_data.time = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')
             self.current_data.process_id = self.process_id
 
             # save_thread = threading.Thread(target=save_data, args=(self.current_data, self.path))
