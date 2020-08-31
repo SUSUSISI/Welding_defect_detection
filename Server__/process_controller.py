@@ -8,13 +8,15 @@
 #   7. 노드에서 csv파일 전송 시 DB에 저장하는 기능
 #   8. 노드에서 실시간 데이터 전송시 웹으로 실시간으로 전송하는 기능 ( 테스트 필요 )
 #   ********************************************************************************************************************
-
+#   개발 필요
+#   1.
 
 from flask import Flask, jsonify, render_template
 from flask import request
-from flask_socketio import send, SocketIO, emit
+from flask_socketio import send, SocketIO, emit, join_room
 import pandas as pd
 from flask_pymongo import PyMongo
+import time
 
 app = Flask(__name__)
 app.config["MONGO_URI"] = "mongodb://localhost:27017/welding_defect_dection"
@@ -25,52 +27,10 @@ mongo = PyMongo(app)
 welding_db = mongo.db.welding_data
 node_db = mongo.db.node_data
 
-# key: Node_ip, value: Node_sid
+# key: Node_ip, value: [Node_id, Node_sid]
 connected_nodeList = {}
-
-#   웹 테이블 테스트
-@app.route("/temp", methods=['POST'])
-def temp():
-    data1 = {
-        "id": 0,
-        "first_name": "Mariele",
-        "last_name": "Mintram",
-        "email": "mmintram0@cbsnews.com",
-        "gender": "Female",
-        "date": "2018-03-18",
-        "ip_address": "110.1.138.115",
-        "money": "50252.57"}
-
-    data2 = {
-        "id": 1,
-        "first_name": "Creight",
-        "last_name": "Coucher",
-        "email": "ccoucher1@google.it",
-        "gender": "Male",
-        "date": "2017-11-18",
-        "ip_address": "7.146.154.113",
-        "money": "56909.08"}
-
-    data3 = {
-        "id": 2,
-        "first_name": "Alie",
-        "last_name": "Bidewel",
-        "email": "abidewel2@illinois.edu",
-        "gender": "Female",
-        "date": "2017-11-14",
-        "ip_address": "207.101.136.222",
-        "money": "85243.91"
-    }
-
-    return {'data': [{
-        "id": 0,
-        "first_name": "Mariele",
-        "last_name": "Mintram",
-        "email": "mmintram0@cbsnews.com",
-        "gender": "Female",
-        "date": "2018-03-18",
-        "ip_address": "110.1.138.115",
-        "money": "50252.57"}]}
+node_average_data_set_list = {}
+node_average_data_set_list["172.20.10.3"] = []
 
 #   형우가 준 데이터 테스트 용
 def test_transmit_data():
@@ -108,21 +68,22 @@ def test_transmit_data():
 def register_node():
     if request.method == 'POST':
         print("hello")
-        node_id = request.args.get('node_id')
+        node_name = request.args.get('node_name')
         description = request.args.get('description')
         speed = 1
         # web_ip = request.remote_addr
         node_ip = request.args.get('node_ip')
 
         # 무조건 등록.
-        data = {'node_id': node_id, 'node_ip': node_ip,
+        data = {'node_name': node_name, 'node_ip': node_ip,
                 'speed': speed, 'description': description,
                 'processes': []}
         welding_db.insert_one(data)
-
         # 등록 후 체크해서 확인
         if node_ip in connected_nodeList.keys():
-            emit('data_request', {"request": True, 'speed': data['speed']}, room=connected_nodeList['node_ip'])
+            if connected_nodeList[node_ip][0] is None:
+                connected_nodeList[node_ip][0] = welding_db.find_one({'node_ip': node_ip})['_id']
+            emit('data_request', {"request": True, 'speed': speed}, room=connected_nodeList[node_ip][1])
 
         return "node register success"
 
@@ -132,11 +93,70 @@ def delete_node():
     node_ip = request.args.get('node_ip')
     welding_db.delete_many({'node_ip': node_ip})
 
+@app.route('/dataSheet_dataTable', methods=['POST'])
+def dataSheet_dataTable():
+    if request.method == "POST":
+        print("dataSheet_dataTable")
+
+        total_data = []
+        cursor = welding_db.find()
+        # 전체 데이터 전부 가지고 와서 total_data
+        for i in range(0, welding_db.count()):
+            total_data.append(cursor.next())
+
+        total_arranged_data = []
+        # print(total_data)
+        for node in total_data:
+            print(node)
+            for process in node['processes']:
+                print(process)
+                avg_current = 0.0
+                avg_voltage = 0.0
+                avg_wireFeed = 0.0
+                expected_result = "temp_expected_result"
+                real_result = "temp_real_result"
+                for data in process['dataList']:
+                    print(data)
+                    # print(data['current'])
+                    avg_current = avg_current + data['current']
+                    avg_voltage = avg_voltage + data['voltage']
+                    avg_wireFeed = avg_wireFeed + data['wireFeed']
+                # print(strnode['_id'])
+
+                total_arranged_data.append({
+                    "data_number": process['process_id'],
+                    "start_time": process['dataList'][0]['date'],
+                    "end_time": process['dataList'][-1]['date'],
+                    "sensor_id": str(node['_id']),
+                    "avg_current": avg_current,
+                    "avg_voltage": avg_voltage,
+                    "avg_wire_feed": avg_wireFeed,
+                    "expected_result": expected_result,
+                    "real_result": real_result
+                })
+
+        print(total_arranged_data)
+
+        return jsonify({'data': total_arranged_data})
+
+@app.route("/dataSheet_dataTable_detail", methods=['POST'])
+def dataSheet_dataTable_detail():
+    if request.method == 'POST':
+        print("dataSheet_dataTable_detail")
+        data = request.get_json()
+
+        print(data)
+
+
+
+#   ********************************************************************************************************************
 #   Connect Web
 #   웹이 필요한 데이터 보내줘야
 @socketio.on("connect", namespace='/web')
 def connect():
     print("connected with web", request.sid, request.remote_addr)
+
+    # emit("get_machine_status_data", {'data': {'current': 10.0, "voltage": 10.0, "wire_feed": 10.0}, "message": "node disconnect"})
 
 @socketio.on("disconnect", namespace='/web')
 def disconnect():
@@ -150,8 +170,15 @@ def connect():
     print("connected node", request.sid, request.remote_addr)
     node_sid = request.sid
     node_ip = request.remote_addr
-    connected_nodeList[node_ip] = node_sid
+    node_average_data_set_list[node_ip] = []
+    data = welding_db.find_one({'node_ip': '172.20.10.3'})
+    if data:
+        node_id = data['_id']
+        connected_nodeList[node_ip] = [node_id, node_sid]
+    else:
+        connected_nodeList[node_ip] = [None, node_sid]
     check_registered_node_and_emit(node_ip, node_sid)
+    # emit("get_machine_status_data", {'data': {'current': 10.0, "voltage": 10.0, "wire_feed": 10.0}, "message": "node disconnect"}, namespace='\web')
 
 #   Disconnect Node
 #   노드와 연결해제되면 connectNodeList에서 제거.
@@ -161,6 +188,7 @@ def disconnect():
     print("disconnect Node", request.sid, request.remote_addr)
     node_ip = request.remote_addr
     connected_nodeList.pop(node_ip)
+    print("connected_nodeList : ", connected_nodeList)
     # 여기에다가 추가하세요.
 
 #   check_registered_node_and_emit 함수
@@ -172,8 +200,10 @@ def disconnect():
 def check_registered_node_and_emit(ip, sid):
     welding_data = welding_db.find_one({'node_ip': ip})
     if welding_data is None:
+        print("welding_data is None")
         emit('data_request', {"request": False, 'speed': 1}, room=sid)
     else:
+        print("welding_data is Exist")
         emit('data_request', {"request": True, 'speed': welding_data['speed']}, room=sid)
 
 #   파일 받고 DB에 저장하는 함수.
@@ -192,11 +222,16 @@ def check_registered_node_and_emit(ip, sid):
 #   DB TEST
 #   welding_db.find_one_and_update({'node_ip': 'node_ip', 'processes.process_id': 1},
 #                                   {'$set': {'processes.$.label': 'youwan'}}, upsert=True)
-@socketio.on('transmit_data')  # ---> 이거 확인해봐야함.
+@socketio.on('data_set', namespace='/node')  # ---> 이거 확인해봐야함.
 def transmit_data(data):
+    print("File GET")
     node_ip = request.remote_addr
-    if welding_db.find_one({'node_ip': request.node_ip}):
-        weldingDataFrame = pd.read_csv(data["data"])
+
+    if welding_db.find_one({'node_ip': node_ip}):
+        weldingDataFrame = pd.Series(" ".join(data["data"].strip(' b\'').strip('\'').split('\' b\'')).split('\\n')).str.split(',', expand=True)
+        print(data["data"])
+        print(data['process_id'])
+        # weldingDataFrame = pd.read_csv(data["data"])
         # 등록할때는 processes가 empty Array이기 때문에 여기서 채워준다.
         welding_db.find_one_and_update({'node_ip': node_ip},
                                        {'$push': {'processes': {'label': 'temp_label',
@@ -214,14 +249,71 @@ def transmit_data(data):
                                                       }
                                             }, upsert=True)
 
+@socketio.on('join')
+def on_join(data):
+    print("Web Join Room")
+    channel = data['channel']
+    join_room(channel)
+    emit("get_recent_defect_data", {'data': {"node_defect_name": "NODE_NAME_1", "node_defect_date": "2020.05.04",
+                                             "node_defect_id":"NODE_DEFECT_ID",
+                                             "defect_task_id":"TASK_1",
+                                                          "node_defect__id": "NODE_ID_1", 'undercut': 10.0,
+                                                          "porosity": 10.0, "machanical": 10.0}})
+
+    # emit("get_recent_status_init_average_data", {'data': {"node_name": "NODE_NAME_1", "node_date": "2020.05.04",
+    #                                                  "node_avg_id": "NODE_ID_1", 'avg_current': 10.0,
+    #                                                  "avg_voltage": 10.0, "avg_wire_feed": 10.0}})
+    # emit("get_machine_status_init_data", {'data': {"node_name": "NODE_NAME_1", "node_id": "NODE_ID_1"}}, room="WEB")
+    # emit("get_machine_status_init_data", {'data': {"node_name": "NODE_NAME_2", "node_id": "NODE_ID_2"}}, room="WEB")
+    # emit("get_machine_status_init_data", {'data': {"node_name": "NODE_NAME_3", "node_id": "NODE_ID_3"}}, room="WEB")
+
+    # emit("get_machine_status_data", {'data': {"node_id": "NODE_ID_1", 'current': 10.0, "voltage": 10.0, "wire_feed": 10.0}}, room="WEB")
+    # emit("get_machine_status_data", {'data': {"node_id": "NODE_ID_1", 'current': 10.0, "voltage": 10.0, "wire_feed": 10.0}}, room="WEB")
+
+@socketio.on("get_recent_status_init_average_data_callBack")
+def get_recent_status_average_data_callBack(data):
+    time.sleep(2)
+    print("get_recent_status_average_data_callBack")
+    emit('get_recent_status_average_data', {'data': {"node_name": "NODE_NAME_1", "node_date": "2020.05.111",
+                                                     "node_avg_id": "NODE_ID_1", "task_id": "TASK_ID",
+                                                     'avg_current': 14.0, "avg_voltage": 14.0, "avg_wire_feed": 14.0}})
+
+@socketio.on('callBack')
+def callBack(data):
+    print("callBack")
+    time.sleep(2)
+    emit("get_machine_status_data", {'data': {"node_id": "NODE_ID_1", 'current': 10.0, "voltage": 10.0, "wire_feed": 10.0}}, room="WEB")
+    emit("get_machine_status_data", {'data': {"node_id": "NODE_ID_2", 'current': 14.0, "voltage": 14.0, "wire_feed": 14.0}}, room="WEB")
+    emit("get_machine_status_data", {'data': {"node_id": "NODE_ID_3", 'current': 16.0, "voltage": 16.0, "wire_feed": 16.0}}, room="WEB")
+
+
 #   Node에서 보내준 실시간 데이터
 #   real_time_data 네임스페이스로 전송
 #   broadcast는 모든 client에 보내서 namespace로 한정.
 #   event 이름 까먹음
-@socketio.on('what??')
-def temp_data(data):
+@socketio.on('current_status', namespace='/node')
+def current_status_data(data):
     real_time_data = data['data']
-    emit('send_data_to_web', {'data': real_time_data}, namespace='/real_time_data')
+    current = data['data']['current']
+    voltage = data['data']['voltage']
+    wire_feed = data['data']['wire_feed']
+
+    print("real_time_data", real_time_data)
+    node_average_data_set_list[request.remote_addr].append((current, voltage, wire_feed))
+    emit("get_machine_status_data", {'data': {"node_ip": "NODE_IP_1", "node_id": "NODE_ID_1", 'current': current, "voltage": voltage, "wire_feed": wire_feed}}, room="WEB")
+
+    # 밑에 코드로 위에 코드 고쳐야함.
+    # emit("get_machine_status_data", {'data': {"node_id": "NODE_ID_1", 'current': 10.0, "voltage": 10.0, "wire_feed": 10.0}}, room="WEB")
+
+@socketio.on('get_machine_status_data_callBack')
+def get_machine_status_data_callBack(data):
+    node_ip = data['node_ip']
+    if len(node_average_data_set_list[node_ip]) > 9:
+        avg = node_average_data_set_list
+
+
+
+
 
 #   ********************************************************************************************************************
 #   Web Page Route
@@ -253,6 +345,10 @@ def data_label():
 @app.route("/sensormanage")
 def sensor_manage():
     return render_template('sensormanage.html')
+
+@app.route("/process_detail.html")
+def process_detail():
+    return render_template("process_detail.html")
 
 
 if __name__ == '__main__':
