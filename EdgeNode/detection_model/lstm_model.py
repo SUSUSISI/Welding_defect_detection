@@ -2,8 +2,6 @@ import welding_machine as wm
 from matplotlib import pyplot as plt
 import random as rd
 import FaDAm as fd
-from numpy import mean
-from numpy import std
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
@@ -16,7 +14,6 @@ from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import LSTM
 from keras.utils import to_categorical
 
-m = wm.WeldingMachine("test", 1)
 
 x_path = "data/x_data.csv"
 
@@ -35,6 +32,59 @@ padding = 50  # 앞 뒤로 5초 데이터 버림.
 is_defect_accuracy = 0.5
 
 
+def test_accuracy_find(num=100):
+    m = wm.WeldingMachine('test', 0.8)
+    find_model = load_model(find_data_path + 'model')
+    classification_model = load_model(classification_data_path + 'model')
+    find_error_count = 0
+    classification_num = 0
+    classification_error_count = 0
+
+    for i in range(num):
+        duration = rd.randint(600, 3600)
+        x_data, _, _ = m.generate_welding_data(duration)
+        y_data = x_data.label
+        data = x_data.data
+        pre_worked_data = pre_work_data(data)
+        predict_list, defect_list = find_defect(pre_worked_data, find_model)
+        expected = 0
+        if y_data != 'normal':
+            expected = 1
+
+        if len(defect_list) != expected:
+            print("Expected_count : ", expected)
+            print("predicted_count : ", len(defect_list))
+            fd.GTAW.save_welding_data(x_data, find_data_path+"error_case/"+str(i)+".csv")
+            find_error_count += 1
+
+        if len(defect_list) == 1 and expected == 1:
+            kind = 0
+            classification_num += 1
+            if y_data == 'porosity':
+                kind = 1
+            elif y_data == 'undercut':
+                kind = 2
+            elif y_data == 'undercurrent':
+                kind = 3
+            elif y_data == 'machanical':
+                kind = 4
+            percentage = classify_defect(pre_worked_data[defect_list[0][0]:defect_list[0][1] + 1],
+                                         classification_model)
+            predicted = percentage.argmax()
+            if kind != predicted:
+                print("Expected_kind : ", kind)
+                print("Predicted_kind : ", predicted)
+                fd.GTAW.save_welding_data(x_data, classification_data_path + "error_case/" + str(i) + ".csv")
+                classification_error_count += 1
+
+    print("Total : ", num)
+    print("Find_Error : ", find_error_count)
+    print("Find_Accuracy : ", (1 - find_error_count/num)*100)
+    print("Classification_Num : ", classification_num)
+    print("Classification_Error : ", classification_error_count)
+    print("Classification_Accuracy : ", (1 - classification_error_count/classification_num)*100)
+
+
 def load_scaler():
     return load(scaler_path)
 
@@ -51,17 +101,19 @@ def generate_x_data():
     fd.GTAW.save_welding_data(x_data, x_path)
 
 
-def show_data(data):
-    plt.figure('Welding data')
+def show_data(path, name="Welding data"):
+    plt.figure(name)
+    data = fd.GTAW.read_GTAW_welding_data(path)
+    x_data = data.data
     plt.clf()
-    plt.plot(data)
+    plt.plot(x_data)
     plt.legend(['Current', 'Voltage', "Wire_feed"])
     plt.xlabel('Time (0.1 sec)')
-    plt.title('Welding data')
+    plt.title(name)
     plt.show()
 
 
-def show_predict_data(x_data, defect_position_list):
+def show_predict_data(x_data, defect_position_list=[]):
     plt.figure('Welding data')
     plt.clf()
     plt.plot(x_data)
@@ -89,6 +141,7 @@ def cut_padding(data, defect_init, defect_end):
 def generate_data(num=500, duration=60, is_find=False):
     x_reshaped_data = []
     y_data = []
+    m = wm.WeldingMachine("test", 1)
     sc = load_scaler()
 
     for i in range(num):
@@ -101,12 +154,6 @@ def generate_data(num=500, duration=60, is_find=False):
         x_reshaped_data = x_reshaped_data + re_data
 
         y_data = y_data + get_y_data(re_data, label, defect_init, defect_end, is_find)
-
-    # print("0 : ", y_data.count(0))
-    # print("1 : ", y_data.count(1))
-    # print("2 : ", y_data.count(2))
-    # print("3 : ", y_data.count(3))
-    # print("4 : ", y_data.count(4))
 
     x_reshaped_data = np.array(x_reshaped_data)
     y_data = np.array(y_data)
@@ -153,6 +200,7 @@ def pre_work_data(data):
     cut_data = np.array(data[padding:length - padding])
     scaler_data = scaler.transform(cut_data)
     re_data = reshape_data(scaler_data)
+
     return np.array(re_data)
 
 
@@ -187,7 +235,7 @@ def classify_defect(data, model):
     return np.mean(predict_list, axis=0)
 
 
-def find_defect(data, model, accuracy):
+def find_defect(data, model, accuracy=is_defect_accuracy):
     defect_list = []
     predict_list = model.predict(data)
 
@@ -271,28 +319,6 @@ def build_model(train_x, train_y, test_x, test_y):
     print('accuracy : %.3f' % (accuracy * 100.0))
 
     return model
-
-
-# # fit and evaluate a model
-# def build_model(train_x, train_y, test_x, test_y):
-#     verbose, epochs, batch_size = 0, 15, 64
-#     n_timesteps, n_features, n_outputs = train_x.shape[1], train_x.shape[2], train_y.shape[1]
-#     model = Sequential()
-#     model.add(LSTM(100, input_shape=(n_timesteps, n_features)))
-#     model.add(Dropout(0.5))
-#     model.add(Dense(100, activation='relu'))
-#     model.add(Dense(n_outputs, activation='softmax'))
-#     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
-#     # fit network
-#     model.fit(train_x, train_y, epochs=epochs, batch_size=batch_size, verbose=verbose)
-#
-#     # evaluate model
-#     _, accuracy = model.evaluate(test_x, test_y, batch_size=batch_size, verbose=verbose)
-#     print('accuracy : %.3f' % (accuracy * 100.0))
-#
-#     return model
-
-
 
 
 def generate_model(data_path):
