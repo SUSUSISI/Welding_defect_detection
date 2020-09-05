@@ -56,7 +56,6 @@ class SendCurrentStatusThread(CustomThread):
     def run(self):
         while not self.FLAG_KILL:
             self.sync()
-            print("FUNC")
             self.func()
             while self.FLAG_PAUSE:
                 time.sleep(0.1)

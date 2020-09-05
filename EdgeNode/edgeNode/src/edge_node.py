@@ -22,11 +22,11 @@ class EdgeNode(QMainWindow, form_class):
     done_data_set = None
     path = "data/started_" + datetime.now().strftime('%Y_%m_%d_%H%M%S') + "/"
 
-    plc_address = 'localhost'
+    plc_address = '192.168.1.104'
     plc_port = '5020'
     plc_client = None
 
-    server_address = '172.20.10.4'
+    server_address = '192.168.1.106'
     server_port = '5000'
 
     FLAG_WELDING = False
@@ -71,7 +71,6 @@ class EdgeNode(QMainWindow, form_class):
 
     def send_current_status(self):
         if self.__FLAG_SERVER_CONNECTION and self.__FLAG_SERVER_DATA_REQUEST:
-            print(datetime.now().strftime('[%Y-%m-%d %H:%M:%S.%f]: '), "Send Current Data")
             server.send_current_status(self.FLAG_WELDING, self.current_data)
 
     def send_data_set(self, pid, file_path):
@@ -83,12 +82,11 @@ class EdgeNode(QMainWindow, form_class):
 
     def log_plc(self, msg):
         when = datetime.now().strftime('[%Y_%m_%d %H:%M:%S]: ')
-        self.tb_log_plc.append(when + msg)
+        # self.tb_log_plc.append(when + msg)
 
     def log_server(self, msg):
-        print(msg)
         when = datetime.now().strftime('[%Y_%m_%d %H:%M:%S]: ')
-        self.tb_log_server.append(when + msg)
+        # self.tb_log_server.append(when + msg)
 
     def set_FLAG_WELDING(self, flag):
         self.FLAG_WELDING = flag
@@ -123,6 +121,9 @@ class EdgeNode(QMainWindow, form_class):
 
     def init_ui(self):
         self.setupUi(self)
+
+        self.tb_log_plc.setPlainText("프로그램 시작")
+        self.tb_log_server.setPlainText("프로그램 시작")
 
         self.le_server_address.setText(self.server_address)
         self.le_server_port.setText(self.server_port)
@@ -196,5 +197,6 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     edge_node = EdgeNode()
     edge_node.show()
+    edge_node.btn_run_func()
     app.exec_()
 

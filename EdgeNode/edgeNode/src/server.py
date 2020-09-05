@@ -82,7 +82,6 @@ def connect_server(address, port):
 
 
 def send_current_status(flag, data):
-    print("send current status ")
     sio.emit('current_status', {'status': flag, 'data': {'current': data[0],
                                                          'voltage': data[1],
                                                          'wire_feed': data[2]}}, namespace='/node')
