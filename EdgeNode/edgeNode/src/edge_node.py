@@ -6,7 +6,6 @@ from datetime import datetime
 import sys
 from PyQt5.QtWidgets import *
 from PyQt5 import uic
-from PyQt5.QtGui import QTextCursor
 import socketio
 from threading import Thread
 import server
@@ -85,14 +84,11 @@ class EdgeNode(QMainWindow, form_class):
     def log_plc(self, msg):
         when = datetime.now().strftime('[%Y_%m_%d %H:%M:%S]: ')
         self.tb_log_plc.append(when + msg)
-        self.tb_log_plc.moveCursor(QTextCursor.End)
 
     def log_server(self, msg):
         print(msg)
         when = datetime.now().strftime('[%Y_%m_%d %H:%M:%S]: ')
         self.tb_log_server.append(when + msg)
-        # self.tb_log_server.moveCursor(QTextCursor.End)
-        # 커서에서 문제가 있는듯?
 
     def set_FLAG_WELDING(self, flag):
         self.FLAG_WELDING = flag

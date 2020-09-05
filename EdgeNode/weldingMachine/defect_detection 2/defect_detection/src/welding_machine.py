@@ -191,5 +191,5 @@ def log(msg):
 
 
 if __name__ == "__main__":
-    test = WeldingMachine("one", 0.2, 'localhost', 5020)
+    test = WeldingMachine("one", 0.2, '192.168.1.104', 5020)
     test.run()

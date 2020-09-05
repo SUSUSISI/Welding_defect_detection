@@ -24,4 +24,4 @@ def run_server(address=None, port=None):
 
 
 if __name__ == '__main__':
-    run_server('localhost', 5020)
+    run_server('192.168.1.104', 5020)
