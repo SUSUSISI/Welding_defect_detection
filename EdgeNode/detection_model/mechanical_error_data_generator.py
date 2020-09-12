@@ -33,7 +33,7 @@ def generate(base_current, base_voltage, base_wire_feed,
         new_data.append_data([init_current, init_voltage, init_wire_feed])
 
     process_duration = duration - current_duration
-    undercut_init = rd.uniform(0.0, process_duration)
+    undercut_init = rd.uniform(4.0, process_duration-11.4)
     undercut_duration = rd.randrange(5, 500)
 
     process_range = np.arange(0, process_duration, 0.02)

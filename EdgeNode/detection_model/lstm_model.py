@@ -1,5 +1,6 @@
 import welding_machine as wm
 from matplotlib import pyplot as plt
+import seaborn as sb
 import random as rd
 import FaDAm as fd
 import numpy as np
@@ -12,7 +13,7 @@ from tensorflow.keras.models import Sequential, load_model
 from tensorflow.keras.layers import Dense
 from tensorflow.keras.layers import Dropout
 from tensorflow.keras.layers import LSTM
-from keras.utils import to_categorical
+from tensorflow.keras.utils import to_categorical
 
 
 x_path = "data/x_data.csv"
@@ -32,7 +33,7 @@ padding = 50  # 앞 뒤로 5초 데이터 버림.
 is_defect_accuracy = 0.5
 
 
-def test_accuracy_find(num=100):
+def test_accuracy_find(num=100, duration=None):
     m = wm.WeldingMachine('test', 0.8)
     find_model = load_model(find_data_path + 'model')
     classification_model = load_model(classification_data_path + 'model')
@@ -41,7 +42,8 @@ def test_accuracy_find(num=100):
     classification_error_count = 0
 
     for i in range(num):
-        duration = rd.randint(600, 3600)
+        if duration is None:
+            duration = rd.randint(600, 3600)
         x_data, _, _ = m.generate_welding_data(duration)
         y_data = x_data.label
         data = x_data.data
@@ -54,7 +56,8 @@ def test_accuracy_find(num=100):
         if len(defect_list) != expected:
             print("Expected_count : ", expected)
             print("predicted_count : ", len(defect_list))
-            fd.GTAW.save_welding_data(x_data, find_data_path+"error_case/"+str(i)+".csv")
+            # fd.GTAW.save_welding_data(x_data, find_data_path+"error_case/"+str(i)+".csv")
+            fd.GTAW.save_welding_data(x_data, "data/test_error/find/" + str(i) + ".csv")
             find_error_count += 1
 
         if len(defect_list) == 1 and expected == 1:
@@ -74,7 +77,8 @@ def test_accuracy_find(num=100):
             if kind != predicted:
                 print("Expected_kind : ", kind)
                 print("Predicted_kind : ", predicted)
-                fd.GTAW.save_welding_data(x_data, classification_data_path + "error_case/" + str(i) + ".csv")
+                # fd.GTAW.save_welding_data(x_data, classification_data_path + "error_case/" + str(i) + ".csv")
+                fd.GTAW.save_welding_data(x_data, "data/test_error/class/" + str(i) + ".csv")
                 classification_error_count += 1
 
     print("Total : ", num)
@@ -92,7 +96,6 @@ def load_scaler():
 def save_scaler(scaler):
     dump(scaler, scaler_path, compress=True)
 
-
 def generate_x_data():
     tm = wm.WeldingMachine("test", 0.8)
     duration = rd.randint(600, 3600)
@@ -105,6 +108,16 @@ def show_data(path, name="Welding data"):
     plt.figure(name)
     data = fd.GTAW.read_GTAW_welding_data(path)
     x_data = data.data
+    plt.clf()
+    plt.plot(x_data)
+    plt.legend(['Current', 'Voltage', "Wire_feed"])
+    plt.xlabel('Time (0.1 sec)')
+    plt.title(name)
+    plt.show()
+
+
+def show_data_a(x_data, name="Welding data"):
+    plt.figure(name)
     plt.clf()
     plt.plot(x_data)
     plt.legend(['Current', 'Voltage', "Wire_feed"])
@@ -202,6 +215,86 @@ def pre_work_data(data):
     re_data = reshape_data(scaler_data)
 
     return np.array(re_data)
+
+
+def show_data_distribution(path=x_path):
+    data_frame = fd.GTAW.read_GTAW_welding_data(path)
+    data = data_frame.data
+    length = data.shape[0]
+    cut_data = np.array(data[padding:length - padding])
+    tp_data = np.transpose(cut_data)
+
+    cmap = plt.get_cmap("tab10")
+
+    show_data_a(cut_data, "Welding Data")
+
+    plt.figure("Current Distribution")
+    plt.clf()
+    sb.kdeplot(tp_data[0], color=cmap(0))
+    plt.legend(['Current'])
+    # plt.ylim(-10, 10)
+    plt.xlabel('current')
+    plt.title("Current Distribution")
+    plt.show()
+
+    plt.figure("Voltage Distribution")
+    plt.clf()
+    sb.kdeplot(tp_data[1], color=cmap(1))
+    plt.legend(['Voltage'])
+    # plt.ylim(-10, 10)
+    plt.xlabel('voltage')
+    plt.title("Voltage Distribution")
+    plt.show()
+
+    plt.figure("Wire Feed Distribution")
+    plt.clf()
+    sb.kdeplot(tp_data[2], color=cmap(2))
+    plt.legend(['Wire Feed'])
+    # plt.ylim(-10, 10)
+    plt.xlabel('wire feed')
+    plt.title("Wire Feed Distribution")
+    plt.show()
+
+
+
+def compare_scaled_data(path=x_path):
+    data_frame = fd.GTAW.read_GTAW_welding_data(path)
+    data = data_frame.data
+    scaler = load_scaler()
+    length = data.shape[0]
+    cut_data = np.array(data[padding:length - padding])
+    show_data_a(cut_data, "Original Data")
+    scaler_data = scaler.transform(cut_data)
+    split_data = np.split(scaler_data, 3, axis=1)
+
+    cmap = plt.get_cmap("tab10")
+
+    plt.figure("Scale Data ( Current )")
+    plt.clf()
+    plt.plot(split_data[0])
+    plt.legend(['Current'])
+    plt.ylim(-10, 10)
+    plt.xlabel('Time (0.1 sec)')
+    plt.title("Scale Data ( Current )")
+    plt.show()
+
+    plt.figure("Scale Data ( Voltage )")
+    plt.clf()
+    plt.plot(split_data[1], color=cmap(1))
+    plt.ylim(-10, 10)
+    plt.legend(['Voltage'])
+    plt.xlabel('Time (0.1 sec)')
+    plt.title("Scale Data ( Voltage )")
+    plt.show()
+
+    plt.figure("Scale Data ( Wire Feed )")
+    plt.clf()
+    plt.plot(split_data[2], color=cmap(2))
+    plt.ylim(-10, 10)
+    plt.legend(['Wire Feed'])
+    plt.xlabel('Time (0.1 sec)')
+    plt.title("Scale Data ( Wire Feed )")
+    plt.show()
 
 
 def predict_welding_data_set(path=x_path):

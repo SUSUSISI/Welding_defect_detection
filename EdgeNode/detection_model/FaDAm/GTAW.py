@@ -243,9 +243,9 @@ def generate_noised_data(base_lines, noise_ratio=0.05):
     noise_voltage = np.random.normal(-noise_ratio, noise_ratio)
     noise_wire_feed = np.random.normal(-0.01, 0.01)
 
-    current = round(base_lines[0] + base_lines[0] * noise_current, 1)
-    voltage = round(base_lines[1] + base_lines[1] * (noise_voltage + noise_current), 1)
-    wire_feed = round(base_lines[2] + base_lines[2] * (noise_wire_feed + noise_current), 1)
+    current = round(base_lines[0] + base_lines[0] * noise_current, 5)
+    voltage = round(base_lines[1] + base_lines[1] * (noise_voltage + noise_current), 5)
+    wire_feed = round(base_lines[2] + base_lines[2] * (noise_wire_feed + noise_current), 5)
 
     return np.array([current, voltage, wire_feed])
 

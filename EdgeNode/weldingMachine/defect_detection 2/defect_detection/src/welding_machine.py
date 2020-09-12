@@ -114,6 +114,7 @@ class WeldingMachine:
             # save_thread.start()
 
             log("용접시작")
+            log(self.current_data.label)
             for i in self.current_data.data:
                 self.send_data(i)
             log("용접 끝")
@@ -151,7 +152,7 @@ class WeldingMachine:
                                                     duration)
 
     def generate_next_data(self):
-        self.next_data = self.generate_welding_data(10)
+        self.next_data = self.generate_welding_data(60)
 
     def generate_welding_data(self, duration=None):
         if duration is None:
@@ -191,5 +192,5 @@ def log(msg):
 
 
 if __name__ == "__main__":
-    test = WeldingMachine("one", 0.2, '192.168.1.104', 5020)
+    test = WeldingMachine("one", 0.8, '192.168.1.105', 5020)
     test.run()

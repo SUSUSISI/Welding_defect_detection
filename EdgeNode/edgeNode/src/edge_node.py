@@ -6,6 +6,7 @@ from datetime import datetime
 import sys
 from PyQt5.QtWidgets import *
 from PyQt5 import uic
+import PyQt5.QtCore as QtCore
 import socketio
 from threading import Thread
 import server
@@ -22,11 +23,11 @@ class EdgeNode(QMainWindow, form_class):
     done_data_set = None
     path = "data/started_" + datetime.now().strftime('%Y_%m_%d_%H%M%S') + "/"
 
-    plc_address = '192.168.1.104'
+    plc_address = '192.168.1.105'
     plc_port = '5020'
     plc_client = None
 
-    server_address = '192.168.1.106'
+    server_address = '192.168.1.102'
     server_port = '5000'
 
     FLAG_WELDING = False
@@ -146,6 +147,7 @@ class EdgeNode(QMainWindow, form_class):
         self.le_plc_port.setEnabled(False)
         self.btn_stop.setEnabled(True)
 
+
         self.server_address = self.le_server_address.text()
         self.server_port = self.le_server_port.text()
         self.plc_address = self.le_plc_address.text()
@@ -199,4 +201,5 @@ if __name__ == '__main__':
     edge_node.show()
     edge_node.btn_run_func()
     app.exec_()
+    edge_node.btn_stop_func()
 
