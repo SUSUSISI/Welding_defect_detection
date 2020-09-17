@@ -23,7 +23,7 @@ class EdgeNode(QMainWindow, form_class):
     done_data_set = None
     path = "data/started_" + datetime.now().strftime('%Y_%m_%d_%H%M%S') + "/"
 
-    plc_address = '192.168.1.105'
+    plc_address = '192.168.1.103'
     plc_port = '5020'
     plc_client = None
 
@@ -47,6 +47,7 @@ class EdgeNode(QMainWindow, form_class):
         self.init_ui()
 
     def server_connection_callback_func(self, flag):
+        print("Server : ", flag)
         if flag is True:
             self.set_FLAG_SERVER_CONNECTION(True)
             self.log_server("서버에 연결되었습니다.")

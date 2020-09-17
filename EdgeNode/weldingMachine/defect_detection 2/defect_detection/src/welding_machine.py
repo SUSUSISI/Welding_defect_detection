@@ -152,7 +152,7 @@ class WeldingMachine:
                                                     duration)
 
     def generate_next_data(self):
-        self.next_data = self.generate_welding_data(60)
+        self.next_data = self.generate_welding_data(30)
 
     def generate_welding_data(self, duration=None):
         if duration is None:

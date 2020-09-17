@@ -69,6 +69,7 @@ def disconnect():
 
 @sio.event(namespace='/node')
 def data_request(data):
+    print("123456")
     data_request_callback_func(data['request'], data['speed'])
 
 
